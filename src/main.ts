@@ -1,13 +1,13 @@
 import "dotenv/config";
 import { buildApp } from "./app.js";
-const port = Number(process.env.PORT ?? 3000);
-const host = "0.0.0.0";
+import { config } from "./config/config.js";
+
 const app = buildApp();
 
 app
-  .listen({ port, host })
+  .listen({ port: config.port, host: "0.0.0.0" })
   .then(() => {
-    app.log.info({ port }, "server started");
+    app.log.info({ port: config.port, env: config.env }, "server started");
   })
   .catch((err) => {
     app.log.error(err, "failed to start server");
