@@ -1,0 +1,22 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: chargeops-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?err}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?err}
+      POSTGRES_DB: ${POSTGRES_DB:?err}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - chargeops_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  chargeops_pgdata:
+    name: chargeops_pgdata
