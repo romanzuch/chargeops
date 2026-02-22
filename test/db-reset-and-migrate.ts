@@ -16,7 +16,7 @@ async function main() {
   await client.connect();
 
   // Reset DB: drop all tables in public schema (keep schema itself)
-    await client.query(`
+  await client.query(`
     DO $$
     DECLARE
       r RECORD;

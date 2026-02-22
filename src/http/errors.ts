@@ -11,6 +11,14 @@ export abstract class AppError extends Error {
   }
 }
 
+/**
+ * Use when the request is syntactically valid but semantically invalid.
+ *
+ * Examples:
+ * - Business rule violations
+ * - Invalid state transitions
+ */
+
 export class BadRequestError extends AppError {
   readonly statusCode = 400;
   readonly type = "https://errors.chargeops.dev/bad-request";
@@ -24,7 +32,10 @@ export class UnauthorizedError extends AppError {
 }
 
 export class ForbiddenError extends AppError {
-  readonly statusCode = 401;
+  /**
+   * The caller is authenticated but not allowed to perform the operation.
+   */
+  readonly statusCode = 403;
   readonly type = "https://errors.chargeops.dev/forbidden";
   readonly title = "Forbidden";
 }
