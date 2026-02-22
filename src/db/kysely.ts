@@ -1,20 +1,17 @@
 import { Kysely, PostgresDialect } from "kysely";
 import { Pool } from "pg";
 import type { Database } from "./types.js";
-
-function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) throw new Error(`Missing required env var: ${name}`);
-  return value;
-}
+import { config } from "../config/config.js";
 
 let dbSingleton: Kysely<Database> | null = null;
 
-export function getDb(): Kysely<Database> {
-  if (dbSingleton) return dbSingleton;
-
-  const databaseUrl = requireEnv("DATABASE_URL");
-
+/**
+ * Creates a new Kysely instance backed by a pg Pool.
+ *
+ * Keep this factory pure so you can unit-test it easily and so we can use it
+ * in alternative runtimes later (e.g. serverless).
+ */
+export function createDb(databaseUrl: string): Kysely<Database> {
   const pool = new Pool({
     connectionString: databaseUrl,
     max: 10,
@@ -22,9 +19,19 @@ export function getDb(): Kysely<Database> {
     connectionTimeoutMillis: 5_000,
   });
 
-  dbSingleton = new Kysely<Database>({
+  return new Kysely<Database>({
     dialect: new PostgresDialect({ pool }),
   });
+}
+
+export function getDb(): Kysely<Database> {
+  if (dbSingleton) return dbSingleton;
+
+  if (!config.databaseUrl) {
+    throw new Error("DATABASE_URL is required to use the database");
+  }
+
+  dbSingleton = createDb(config.databaseUrl);
 
   return dbSingleton;
 }
