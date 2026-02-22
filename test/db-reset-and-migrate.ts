@@ -15,10 +15,31 @@ async function main() {
   const client = new Client({ connectionString: url });
   await client.connect();
 
-  // hard reset schema (integration tests should be deterministic)
-  await client.query("DROP SCHEMA IF EXISTS public CASCADE;");
-  await client.query("CREATE SCHEMA public;");
-  await client.query("GRANT ALL ON SCHEMA public TO public;");
+  // Reset DB: drop all tables in public schema (keep schema itself)
+    await client.query(`
+    DO $$
+    DECLARE
+      r RECORD;
+    BEGIN
+      -- drop all tables
+      FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public')
+      LOOP
+        EXECUTE 'DROP TABLE IF EXISTS public.' || quote_ident(r.tablename) || ' CASCADE';
+      END LOOP;
+
+      -- drop all sequences
+      FOR r IN (SELECT sequencename FROM pg_sequences WHERE schemaname = 'public')
+      LOOP
+        EXECUTE 'DROP SEQUENCE IF EXISTS public.' || quote_ident(r.sequencename) || ' CASCADE';
+      END LOOP;
+
+      -- drop all views
+      FOR r IN (SELECT table_name FROM information_schema.views WHERE table_schema = 'public')
+      LOOP
+        EXECUTE 'DROP VIEW IF EXISTS public.' || quote_ident(r.table_name) || ' CASCADE';
+      END LOOP;
+    END $$;
+    `);
 
   // run migrations in order (001_..., 002_..., ...)
   const migrationsDir = path.resolve(process.cwd(), "migrations");

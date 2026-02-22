@@ -4,6 +4,7 @@ export default defineConfig({
   test: {
     include: ["test/integration/**/*.test.ts"],
     setupFiles: ["test/setup/integration.setup.ts"],
-    // avoid running unit tests here
+    maxWorkers: 1,
+    fileParallelism: false,
   },
 });
