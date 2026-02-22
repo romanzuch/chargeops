@@ -23,6 +23,8 @@
     "fastify": "^5.7.4",
     "kysely": "^0.28.11",
     "pg": "^8.18.0",
+    "pino": "^10.3.1",
+    "pino-http": "^11.0.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
