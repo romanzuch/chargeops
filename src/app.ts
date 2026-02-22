@@ -12,11 +12,13 @@ function buildApp(): FastifyInstance {
   });
 
   app.addHook("onRequest", async (request, reply) => {
-    reply.header("x-request-id", request.id);
-  });
+    // start timing
+    request.startTime = process.hrtime.bigint();
 
-  // Structured Request Logging
-  app.addHook("onRequest", async (request) => {
+    // echo req id to client
+    reply.header("x-request-id", request.id);
+
+    // structured incoming log
     request.log.info(
       {
         reqId: request.id,
@@ -35,6 +37,7 @@ function buildApp(): FastifyInstance {
     const end = process.hrtime.bigint();
     const start = request.startTime ?? end;
     const responseTimeMs = Number(end - start) / 1_000_000;
+
     request.log.info(
       {
         reqId: request.id,
