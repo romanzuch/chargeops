@@ -4,9 +4,9 @@ services:
     container_name: chargeops-db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:?err}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?err}
-      POSTGRES_DB: ${POSTGRES_DB:?err}
+      POSTGRES_USER: ${POSTGRES_USER:-chargeops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chargeops}
+      POSTGRES_DB: ${POSTGRES_DB:-chargeops}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -21,9 +21,9 @@ services:
     container_name: chargeops-db-test
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_TEST_USER:?err}
-      POSTGRES_PASSWORD: ${POSTGRES_TEST_PASSWORD:?err}
-      POSTGRES_DB: ${POSTGRES_TEST_DB:?err}
+      POSTGRES_USER: ${POSTGRES_TEST_USER:-chargeops}
+      POSTGRES_PASSWORD: ${POSTGRES_TEST_PASSWORD:-chargeops}
+      POSTGRES_DB: ${POSTGRES_TEST_DB:-chargeops_test}
     ports:
       - "${POSTGRES_TEST_PORT:-5433}:5432"
     volumes:
