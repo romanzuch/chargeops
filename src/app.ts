@@ -3,6 +3,7 @@ import { config } from "./config/config.js";
 import { errorHandlerPlugin } from "./plugins/error-handler.js";
 import { jwtAuthPlugin } from "./plugins/jwt-auth.js";
 import { genRequestId, requestContextPlugin } from "./plugins/request-context.js";
+import { authRoutes } from "./routes/auth.js";
 import { healthRoutes } from "./routes/health.js";
 
 /**
@@ -36,6 +37,7 @@ export function buildApp(): FastifyInstance {
   app.register(jwtAuthPlugin);
 
   // Routes
+  app.register(authRoutes);
   app.register(healthRoutes);
 
   return app;

@@ -18,3 +18,13 @@ const DEFAULT_TOKEN_BYTES = 32;
 export function randomTokenBytes(byteCount = DEFAULT_TOKEN_BYTES): Buffer {
   return crypto.randomBytes(byteCount);
 }
+
+/**
+ * Computes SHA256 hash of a buffer and returns the lowercase hex string.
+ *
+ * Used for storing refresh token hashes in the database.
+ * On validation, re-hash the incoming token and compare with `safeEqual`.
+ */
+export async function sha256Hex(buffer: Buffer): Promise<string> {
+  return crypto.createHash("sha256").update(buffer).digest("hex");
+}
