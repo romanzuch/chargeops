@@ -12,9 +12,9 @@ transaction) and return plain row types. No business logic lives here.
 
 Inserts a new user row and returns it.
 
-| Param              | Type     |
-|--------------------|----------|
-| `input.email`      | `string` |
+| Param                | Type     |
+| -------------------- | -------- |
+| `input.email`        | `string` |
 | `input.passwordHash` | `string` |
 
 **Throws** `ConflictError` if the email is already taken (pg error `23505`).
@@ -40,19 +40,20 @@ Returns the user matching `id` (UUID string), or `undefined` if none exists.
 
 Inserts a new refresh token row and returns it.
 
-| Param              | Type     |
-|--------------------|----------|
-| `input.userId`     | `string` |
-| `input.tenantId`   | `string` |
-| `input.familyId`   | `string` — UUID for the rotation family |
-| `input.tokenHash`  | `string` — SHA-256 hex of the opaque value |
-| `input.expiresAt`  | `Date`   |
+| Param             | Type                                       |
+| ----------------- | ------------------------------------------ |
+| `input.userId`    | `string`                                   |
+| `input.tenantId`  | `string`                                   |
+| `input.familyId`  | `string` — UUID for the rotation family    |
+| `input.tokenHash` | `string` — SHA-256 hex of the opaque value |
+| `input.expiresAt` | `Date`                                     |
 
 ---
 
 ### `findValidRefreshTokenByHash(db, tokenHash): Promise<RefreshTokensTable | undefined>`
 
 Returns a token row only when:
+
 - `token_hash = tokenHash`
 - `revoked_at IS NULL`
 - `expires_at > now()`
@@ -79,13 +80,13 @@ tenants. Use during logout or after a security incident.
 
 Atomic rotation inside a database transaction.
 
-| Param                  | Type                                          |
-|------------------------|-----------------------------------------------|
-| `oldTokenHash`         | `string` — hash of the token being exchanged  |
-| `newToken.userId`      | `string`                                      |
-| `newToken.tenantId`    | `string`                                      |
-| `newToken.tokenHash`   | `string` — hash of the newly issued token     |
-| `newToken.expiresAt`   | `Date`                                        |
+| Param                | Type                                         |
+| -------------------- | -------------------------------------------- |
+| `oldTokenHash`       | `string` — hash of the token being exchanged |
+| `newToken.userId`    | `string`                                     |
+| `newToken.tenantId`  | `string`                                     |
+| `newToken.tokenHash` | `string` — hash of the newly issued token    |
+| `newToken.expiresAt` | `Date`                                       |
 
 **Steps:**
 

@@ -4,42 +4,42 @@
 
 ### `users`
 
-| Column          | Type        | Notes                        |
-|-----------------|-------------|------------------------------|
-| `id`            | `uuid`      | PK, `gen_random_uuid()`      |
-| `email`         | `text`      | Unique, stored as-is         |
-| `password_hash` | `text`      | argon2id hash                |
-| `created_at`    | `timestamptz` | Set by DB default            |
+| Column          | Type          | Notes                   |
+| --------------- | ------------- | ----------------------- |
+| `id`            | `uuid`        | PK, `gen_random_uuid()` |
+| `email`         | `text`        | Unique, stored as-is    |
+| `password_hash` | `text`        | argon2id hash           |
+| `created_at`    | `timestamptz` | Set by DB default       |
 
 ### `tenants`
 
-| Column       | Type        | Notes               |
-|--------------|-------------|---------------------|
-| `id`         | `uuid`      | PK                  |
-| `name`       | `text`      |                     |
-| `created_at` | `timestamptz` |                   |
+| Column       | Type          | Notes |
+| ------------ | ------------- | ----- |
+| `id`         | `uuid`        | PK    |
+| `name`       | `text`        |       |
+| `created_at` | `timestamptz` |       |
 
 ### `user_tenant_roles`
 
-| Column      | Type   | Notes                              |
-|-------------|--------|------------------------------------|
-| `user_id`   | `uuid` | FK → `users.id` ON DELETE CASCADE  |
-| `tenant_id` | `uuid` | FK → `tenants.id` ON DELETE CASCADE|
-| `role`      | `text` | CHECK IN ('admin','operator','viewer') |
-| `created_at`| `timestamptz` |                             |
+| Column       | Type          | Notes                                  |
+| ------------ | ------------- | -------------------------------------- |
+| `user_id`    | `uuid`        | FK → `users.id` ON DELETE CASCADE      |
+| `tenant_id`  | `uuid`        | FK → `tenants.id` ON DELETE CASCADE    |
+| `role`       | `text`        | CHECK IN ('admin','operator','viewer') |
+| `created_at` | `timestamptz` |                                        |
 
 ### `refresh_tokens`
 
-| Column       | Type        | Notes                                        |
-|--------------|-------------|----------------------------------------------|
-| `id`         | `uuid`      | PK                                           |
-| `user_id`    | `uuid`      | FK → `users.id` ON DELETE CASCADE            |
-| `tenant_id`  | `uuid`      | FK → `tenants.id` ON DELETE CASCADE          |
-| `family_id`  | `uuid`      | Groups tokens in one rotation chain          |
-| `token_hash` | `text`      | SHA-256 hex of the opaque bearer value       |
-| `expires_at` | `timestamptz` | Must be > `created_at` (CHECK constraint)  |
-| `revoked_at` | `timestamptz` | NULL = active; non-NULL = revoked          |
-| `created_at` | `timestamptz` |                                            |
+| Column       | Type          | Notes                                     |
+| ------------ | ------------- | ----------------------------------------- |
+| `id`         | `uuid`        | PK                                        |
+| `user_id`    | `uuid`        | FK → `users.id` ON DELETE CASCADE         |
+| `tenant_id`  | `uuid`        | FK → `tenants.id` ON DELETE CASCADE       |
+| `family_id`  | `uuid`        | Groups tokens in one rotation chain       |
+| `token_hash` | `text`        | SHA-256 hex of the opaque bearer value    |
+| `expires_at` | `timestamptz` | Must be > `created_at` (CHECK constraint) |
+| `revoked_at` | `timestamptz` | NULL = active; non-NULL = revoked         |
+| `created_at` | `timestamptz` |                                           |
 
 #### Indexes
 
@@ -92,7 +92,7 @@ derived from the same rotation chain.
 
 ## Migration History
 
-| File                              | Description                         |
-|-----------------------------------|-------------------------------------|
-| `001_init.sql`                    | Base schema: tenants, users, roles, refresh_tokens |
-| `002_refresh_token_family.sql`    | Adds `family_id` column and index to `refresh_tokens` |
+| File                           | Description                                           |
+| ------------------------------ | ----------------------------------------------------- |
+| `001_init.sql`                 | Base schema: tenants, users, roles, refresh_tokens    |
+| `002_refresh_token_family.sql` | Adds `family_id` column and index to `refresh_tokens` |

@@ -36,6 +36,7 @@ The ChargeOps authentication system provides secure user registration, login, an
 ### Multi-Tenant Design
 
 Each token embeds:
+
 - `sub`: User ID (UUID)
 - `tid`: Tenant ID (UUID) — multi-tenant scoping
 - `jti`: Unique token ID — enables future per-token revocation
@@ -49,6 +50,7 @@ Each token embeds:
 Register a new user.
 
 **Request:**
+
 ```json
 {
   "email": "user@example.com",
@@ -58,11 +60,13 @@ Register a new user.
 ```
 
 **Validation:**
+
 - `email`: Must be valid email format (lowercase normalized)
 - `password`: Minimum 12 characters (future: entropy scoring)
 - `name`: Max 255 characters (optional, reserved for display names)
 
 **Response (201 Created):**
+
 ```json
 {
   "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -71,19 +75,21 @@ Register a new user.
 ```
 
 **Cookie Set:**
+
 ```
 Set-Cookie: REFRESH_TOKEN=<base64url>; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000
 ```
 
 **Error Scenarios:**
 
-| Status | Error Type | Reason |
-|--------|-----------|--------|
-| 400 | bad-request | Invalid email, weak password, validation failed |
-| 409 | conflict | Email already registered |
-| 500 | internal | Server error (see logs) |
+| Status | Error Type  | Reason                                          |
+| ------ | ----------- | ----------------------------------------------- |
+| 400    | bad-request | Invalid email, weak password, validation failed |
+| 409    | conflict    | Email already registered                        |
+| 500    | internal    | Server error (see logs)                         |
 
 **Example cURL:**
+
 ```bash
 curl -X POST http://localhost:3000/auth/register \
   -H "Content-Type: application/json" \
@@ -101,6 +107,7 @@ curl -X POST http://localhost:3000/auth/register \
 Authenticate a user and establish a session.
 
 **Request:**
+
 ```json
 {
   "email": "user@example.com",
@@ -109,10 +116,12 @@ Authenticate a user and establish a session.
 ```
 
 **Validation:**
+
 - Both email and password required
 - Email normalized to lowercase for lookup
 
 **Response (200 OK):**
+
 ```json
 {
   "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -121,21 +130,23 @@ Authenticate a user and establish a session.
 ```
 
 **Cookie Set:**
+
 ```
 Set-Cookie: REFRESH_TOKEN=<base64url>; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000
 ```
 
 **Error Scenarios:**
 
-| Status | Error Type | Reason |
-|--------|-----------|--------|
-| 400 | bad-request | Validation failed (missing fields) |
-| 401 | unauthorized | Invalid credentials (generic for security) |
-| 500 | internal | Server error |
+| Status | Error Type   | Reason                                     |
+| ------ | ------------ | ------------------------------------------ |
+| 400    | bad-request  | Validation failed (missing fields)         |
+| 401    | unauthorized | Invalid credentials (generic for security) |
+| 500    | internal     | Server error                               |
 
 **Security Note:** Error response is intentionally generic ("Invalid credentials") for both non-existent users and wrong passwords — this prevents email enumeration attacks.
 
 **Example cURL:**
+
 ```bash
 curl -X POST http://localhost:3000/auth/login \
   -H "Content-Type: application/json" \
@@ -152,12 +163,14 @@ curl -X POST http://localhost:3000/auth/login \
 Refresh an expired or expiring access token.
 
 **Request (Option 1 - Cookie, Automatic):**
+
 ```
 POST /auth/refresh
 Cookie: REFRESH_TOKEN=<base64url>
 ```
 
 **Request (Option 2 - Body, Non-Browser Clients):**
+
 ```json
 {
   "refreshToken": "<base64url>"
@@ -165,10 +178,12 @@ Cookie: REFRESH_TOKEN=<base64url>
 ```
 
 Only include in body if:
+
 - Not using cookies (e.g., mobile client, API gateway)
 - `REFRESH_TOKEN_IN_BODY=true` environment variable is set
 
 **Response (200 OK):**
+
 ```json
 {
   "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
@@ -177,6 +192,7 @@ Only include in body if:
 ```
 
 **Cookie Set (Rotated):**
+
 ```
 Set-Cookie: REFRESH_TOKEN=<NEW_base64url>; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000
 ```
@@ -185,15 +201,16 @@ The new refresh token has the same `family_id` but different token bytes (rotati
 
 **Error Scenarios:**
 
-| Status | Error Type | Reason |
-|--------|-----------|--------|
-| 400 | bad-request | Missing refresh token (no cookie, no body) |
-| 401 | unauthorized | Token invalid, expired, revoked, or replay detected |
-| 500 | internal | Server error |
+| Status | Error Type   | Reason                                              |
+| ------ | ------------ | --------------------------------------------------- |
+| 400    | bad-request  | Missing refresh token (no cookie, no body)          |
+| 401    | unauthorized | Token invalid, expired, revoked, or replay detected |
+| 500    | internal     | Server error                                        |
 
 **Replay Attack Detection:**
 
 If a refreshed token is used again:
+
 1. Database transaction detects `revoked_at` is not null
 2. Entire token family is revoked durably
 3. Error thrown with explicit "Refresh token reuse detected" detail
@@ -202,6 +219,7 @@ If a refreshed token is used again:
 This forces re-authentication on the suspected-compromised client.
 
 **Example cURL (with cookie):**
+
 ```bash
 curl -X POST http://localhost:3000/auth/refresh \
   -b "REFRESH_TOKEN=<token>" \
@@ -215,12 +233,14 @@ curl -X POST http://localhost:3000/auth/refresh \
 Log out a user and revoke their refresh token family.
 
 **Request (Option 1 - Cookie, Automatic):**
+
 ```
 POST /auth/logout
 Cookie: REFRESH_TOKEN=<base64url>
 ```
 
 **Request (Option 2 - Body, Non-Browser Clients):**
+
 ```json
 {
   "refreshToken": "<base64url>"
@@ -228,29 +248,33 @@ Cookie: REFRESH_TOKEN=<base64url>
 ```
 
 **Response (204 No Content):**
+
 ```
 (empty body)
 ```
 
 **Cookie Cleared:**
+
 ```
 Set-Cookie: REFRESH_TOKEN=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0
 ```
 
 **Effect:**
+
 - Entire refresh token family is revoked in database
 - All tokens from the same login session become invalid
 - Forces re-authentication on all other devices/tabs
 
 **Error Scenarios:**
 
-| Status | Error Type | Reason |
-|--------|-----------|--------|
-| 400 | bad-request | Missing refresh token |
-| 401 | unauthorized | Invalid or already-revoked token |
-| 500 | internal | Server error |
+| Status | Error Type   | Reason                           |
+| ------ | ------------ | -------------------------------- |
+| 400    | bad-request  | Missing refresh token            |
+| 401    | unauthorized | Invalid or already-revoked token |
+| 500    | internal     | Server error                     |
 
 **Example cURL:**
+
 ```bash
 curl -X POST http://localhost:3000/auth/logout \
   -b "REFRESH_TOKEN=<token>"
@@ -263,12 +287,14 @@ curl -X POST http://localhost:3000/auth/logout \
 Get current authenticated user's profile (protected endpoint).
 
 **Request:**
+
 ```
 GET /me
 Authorization: Bearer <accessToken>
 ```
 
 **Response (200 OK):**
+
 ```json
 {
   "userId": "550e8400-e29b-41d4-a716-446655440000",
@@ -279,6 +305,7 @@ Authorization: Bearer <accessToken>
 ```
 
 **Fields:**
+
 - `userId`: User's UUID
 - `email`: User's registered email (lowercase)
 - `tenantId`: Current tenant scope (from JWT `tid` claim)
@@ -286,12 +313,13 @@ Authorization: Bearer <accessToken>
 
 **Error Scenarios:**
 
-| Status | Error Type | Reason |
-|--------|-----------|--------|
-| 401 | unauthorized | Missing/malformed Authorization header, invalid/expired token |
-| 500 | internal | Server error |
+| Status | Error Type   | Reason                                                        |
+| ------ | ------------ | ------------------------------------------------------------- |
+| 401    | unauthorized | Missing/malformed Authorization header, invalid/expired token |
+| 500    | internal     | Server error                                                  |
 
 **Example cURL:**
+
 ```bash
 curl -X GET http://localhost:3000/me \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
@@ -304,6 +332,7 @@ curl -X GET http://localhost:3000/me \
 All errors follow RFC 9457 "Problem Details for HTTP APIs".
 
 **Example:**
+
 ```json
 {
   "type": "https://errors.chargeops.dev/bad-request",
@@ -316,6 +345,7 @@ All errors follow RFC 9457 "Problem Details for HTTP APIs".
 ```
 
 **Standard Problem Details Fields:**
+
 - `type`: Machine-readable error category URI
 - `title`: Human-readable error classification
 - `status`: HTTP status code (also in response header)
@@ -332,25 +362,29 @@ For validation errors, an additional `errors` field may be present (maps field n
 ### Development vs. Production
 
 **Development (`NODE_ENV=development`):**
+
 ```
 Set-Cookie: REFRESH_TOKEN=<token>; Path=/; HttpOnly; Secure=false; SameSite=Strict; Max-Age=2592000
 ```
+
 - `Secure=false` allows http://localhost testing in dev tools
 
 **Production (`NODE_ENV=production`):**
+
 ```
 Set-Cookie: REFRESH_TOKEN=<token>; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=2592000
 ```
+
 - `Secure=true` requires HTTPS (enforced by browsers)
 - Prevents man-in-the-middle interception
 
 ### Configuration
 
-| Env Var | Default | Purpose |
-|---------|---------|---------|
-| `NODE_ENV` | `development` | Determines `Secure` flag (production=true) |
-| `JWT_REFRESH_TTL_SECONDS` | `2592000` (30 days) | Cookie max-age / token expiry |
-| `REFRESH_TOKEN_IN_BODY` | `false` | Include refresh token in JSON body (non-browser clients) |
+| Env Var                   | Default             | Purpose                                                  |
+| ------------------------- | ------------------- | -------------------------------------------------------- |
+| `NODE_ENV`                | `development`       | Determines `Secure` flag (production=true)               |
+| `JWT_REFRESH_TTL_SECONDS` | `2592000` (30 days) | Cookie max-age / token expiry                            |
+| `REFRESH_TOKEN_IN_BODY`   | `false`             | Include refresh token in JSON body (non-browser clients) |
 
 ---
 
@@ -362,37 +396,42 @@ The following endpoints have reserved preHandler hook positions for future rate 
 
 ```typescript
 // Future implementation pattern:
-POST /auth/register   // rateLimitPlugin("auth:register", { points: 5, duration: 3600 })
-POST /auth/login      // rateLimitPlugin("auth:login", { points: 10, duration: 300 })
-POST /auth/refresh    // rateLimitPlugin("auth:refresh", { points: 20, duration: 60 })
-POST /auth/logout     // (typically not rate-limited)
+POST / auth / register; // rateLimitPlugin("auth:register", { points: 5, duration: 3600 })
+POST / auth / login; // rateLimitPlugin("auth:login", { points: 10, duration: 300 })
+POST / auth / refresh; // rateLimitPlugin("auth:refresh", { points: 20, duration: 60 })
+POST / auth / logout; // (typically not rate-limited)
 ```
 
 ## Security Considerations
 
 ### Password Storage
+
 - Argon2id hashing (OWASP-compliant)
 - Memory cost: 19 MiB (OWASP minimum)
 - ~100-200ms per hash operation (detrimental to brute force)
 
 ### Token Security
+
 - Access tokens: 15-minute TTL (short to limit exposure)
 - Refresh tokens: 30-day TTL (long-lived but revocable)
 - SHA256 hashing for token storage (plaintext never persisted)
 - Timing-safe comparison for token verification
 
 ### Replay Attack Prevention
+
 - Token family tracking: each login session has unique `family_id`
 - On refresh: old token marked revoked, new token has same family
 - On replay: when old token used, entire family revoked
 - Durability: family revocation committed before throwing error
 
 ### Information Leakage Prevention
+
 - Generic "Invalid credentials" for both non-existent users and bad passwords
 - No email enumeration possible
 - Error details redacted in logs (Authorization header not logged)
 
 ### Cookie Security
+
 - `HttpOnly`: Prevents JavaScript access (XSS protection)
 - `Secure`: Only sent over HTTPS in production
 - `SameSite=Strict`: Prevents CSRF attacks (no cross-site cookie submission)
@@ -403,24 +442,30 @@ POST /auth/logout     // (typically not rate-limited)
 ## Testing
 
 ### Unit Tests
+
 Location: `/test/unit/`
+
 - Schemas validation: `/test/unit/http/schemas/auth.schemas.test.ts`
 - Service logic: `/test/unit/services/auth.service.test.ts` (mocked DB)
 
 Run:
+
 ```bash
 npm test -- test/unit/services/auth.service.test.ts
 npm test -- test/unit/http/schemas/auth.schemas.test.ts
 ```
 
 ### Integration Tests
+
 Location: `/test/integration/routes/auth.test.ts`
+
 - Full endpoint testing with real database
 - Cookie handling and rotation
 - Replay attack detection
 - All error scenarios
 
 Run:
+
 ```bash
 npm test:integration -- test/integration/routes/auth.test.ts
 ```

@@ -32,22 +32,14 @@ export async function findUserByEmail(
   db: Kysely<Database>,
   email: string,
 ): Promise<Selectable<UsersTable> | undefined> {
-  return db
-    .selectFrom("users")
-    .selectAll()
-    .where("email", "=", email)
-    .executeTakeFirst();
+  return db.selectFrom("users").selectAll().where("email", "=", email).executeTakeFirst();
 }
 
 export async function findUserById(
   db: Kysely<Database>,
   id: string,
 ): Promise<Selectable<UsersTable> | undefined> {
-  return db
-    .selectFrom("users")
-    .selectAll()
-    .where("id", "=", id)
-    .executeTakeFirst();
+  return db.selectFrom("users").selectAll().where("id", "=", id).executeTakeFirst();
 }
 
 function isUniqueViolation(err: unknown): boolean {

@@ -23,10 +23,7 @@ export const jwtAuthPlugin = fp(
     // Initialize per-request slot to null; populated by verifyJwt.
     app.decorateRequest("jwtUser", null);
 
-    const verifyJwt = async (
-      request: FastifyRequest,
-      _reply: FastifyReply,
-    ): Promise<void> => {
+    const verifyJwt = async (request: FastifyRequest, _reply: FastifyReply): Promise<void> => {
       const secret = config.jwtSecret;
       if (!secret) {
         throw new InternalServerError("JWT_SECRET is not configured");
@@ -34,9 +31,7 @@ export const jwtAuthPlugin = fp(
 
       const authHeader = request.headers.authorization;
       if (!authHeader || !authHeader.startsWith("Bearer ")) {
-        throw new UnauthorizedError(
-          "Missing or malformed Authorization header",
-        );
+        throw new UnauthorizedError("Missing or malformed Authorization header");
       }
 
       const token = authHeader.slice(7).trim();

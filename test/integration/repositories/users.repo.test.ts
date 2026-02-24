@@ -1,11 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import "dotenv/config";
 import { createDb, destroyDb } from "../../../src/db/kysely.js";
-import {
-  createUser,
-  findUserByEmail,
-  findUserById,
-} from "../../../src/repositories/users.repo.js";
+import { createUser, findUserByEmail, findUserById } from "../../../src/repositories/users.repo.js";
 import { ConflictError } from "../../../src/http/errors.js";
 import type { Kysely } from "kysely";
 import type { Database } from "../../../src/db/types.js";
@@ -43,9 +39,9 @@ describe("createUser", () => {
     const email = `dup-${Date.now()}@example.com`;
     await createUser(db, { email, passwordHash: "hash1" });
 
-    await expect(
-      createUser(db, { email, passwordHash: "hash2" }),
-    ).rejects.toBeInstanceOf(ConflictError);
+    await expect(createUser(db, { email, passwordHash: "hash2" })).rejects.toBeInstanceOf(
+      ConflictError,
+    );
   });
 
   it("stores email as-is (no normalisation inside repo)", async () => {

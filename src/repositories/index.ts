@@ -1,9 +1,4 @@
-export {
-  createUser,
-  findUserByEmail,
-  findUserById,
-  type CreateUserInput,
-} from "./users.repo.js";
+export { createUser, findUserByEmail, findUserById, type CreateUserInput } from "./users.repo.js";
 
 export {
   createRefreshToken,

@@ -56,7 +56,7 @@ describe("Auth Endpoints", () => {
         expect.objectContaining({
           accessToken: expect.any(String),
           expiresIn: expect.any(Number),
-        })
+        }),
       );
 
       // Verify JWT structure (three dot-separated parts)
@@ -193,7 +193,7 @@ describe("Auth Endpoints", () => {
         expect.objectContaining({
           accessToken: expect.any(String),
           expiresIn: expect.any(Number),
-        })
+        }),
       );
     });
 
@@ -316,7 +316,7 @@ describe("Auth Endpoints", () => {
           email: expect.stringContaining("@"),
           tenantId: expect.any(String),
           role: expect.stringMatching(/^(admin|operator|viewer)$/),
-        })
+        }),
       );
     });
 
@@ -371,7 +371,7 @@ describe("Auth Endpoints", () => {
         expect.objectContaining({
           accessToken: expect.any(String),
           expiresIn: expect.any(Number),
-        })
+        }),
       );
     });
 
@@ -549,17 +549,11 @@ describe("Auth Endpoints", () => {
         .where(
           "user_id",
           "in",
-          db
-            .selectFrom("users")
-            .select("id")
-            .where("email", "like", "%@example.com")
+          db.selectFrom("users").select("id").where("email", "like", "%@example.com"),
         )
         .execute();
 
-      await db
-        .deleteFrom("users")
-        .where("email", "like", "%@example.com")
-        .execute();
+      await db.deleteFrom("users").where("email", "like", "%@example.com").execute();
     } catch (err) {
       // Ignore errors (tables might not exist in test setup)
       console.error("Cleanup error (ignored):", err);

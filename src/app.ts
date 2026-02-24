@@ -1,3 +1,4 @@
+import fastifyCookie from "@fastify/cookie";
 import Fastify, { type FastifyInstance } from "fastify";
 import { config } from "./config/config.js";
 import { errorHandlerPlugin } from "./plugins/error-handler.js";
@@ -20,11 +21,7 @@ export function buildApp(): FastifyInstance {
       level: config.logLevel,
       // Add basic redaction early to avoid accidentally logging secrets.
       redact: {
-        paths: [
-          'req.headers.authorization',
-          'req.headers.cookie',
-          'req.headers["set-cookie"]',
-        ],
+        paths: ["req.headers.authorization", "req.headers.cookie", 'req.headers["set-cookie"]'],
         remove: true,
       },
     },
@@ -32,6 +29,7 @@ export function buildApp(): FastifyInstance {
   });
 
   // Cross-cutting concerns
+  app.register(fastifyCookie);
   app.register(requestContextPlugin);
   app.register(errorHandlerPlugin);
   app.register(jwtAuthPlugin);

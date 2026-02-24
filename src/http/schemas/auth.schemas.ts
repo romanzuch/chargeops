@@ -7,8 +7,8 @@ import { validatePasswordStrength } from "../../security/password.js";
  */
 const emailSchema = z
   .string()
-  .email("Invalid email address")
-  .transform((v) => v.trim().toLowerCase());
+  .transform((v) => v.trim().toLowerCase())
+  .pipe(z.string().email("Invalid email address"));
 
 /**
  * Password validation with minimum length enforcement.

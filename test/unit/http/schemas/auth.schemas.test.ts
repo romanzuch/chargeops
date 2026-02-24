@@ -6,7 +6,7 @@ import {
   LogoutRequestSchema,
   AccessTokenResponseSchema,
   CurrentUserResponseSchema,
-} from "../../../src/http/schemas/auth.schemas.js";
+} from "../../../../src/http/schemas/auth.schemas.js";
 
 describe("Auth Schemas", () => {
   describe("RegisterRequestSchema", () => {
@@ -239,15 +239,14 @@ describe("Auth Schemas", () => {
       expect(result.success).toBe(false);
     });
 
-    it("accepts fractional expiresIn (coerced to int)", () => {
+    it("rejects fractional expiresIn (must be integer)", () => {
       const input = {
         accessToken: "token",
         expiresIn: 900.5,
       };
 
       const result = AccessTokenResponseSchema.safeParse(input);
-      expect(result.success).toBe(true);
-      // Note: Zod coerces to integer, losing decimal
+      expect(result.success).toBe(false);
     });
   });
 

@@ -10,13 +10,13 @@ scope. Verification is handled centrally by the `verifyJwt` Fastify preHandler.
 
 ## Claims
 
-| Claim | Type     | Description                                      |
-|-------|----------|--------------------------------------------------|
-| `sub` | `string` | Subject — authenticated user ID (UUID)           |
-| `tid` | `string` | Tenant ID — tenant scope for this token (UUID)   |
-| `jti` | `string` | JWT ID — UUID, unique per token                  |
-| `iat` | `number` | Issued-at (seconds since epoch, set by issuer)   |
-| `exp` | `number` | Expiry (seconds since epoch)                     |
+| Claim | Type     | Description                                    |
+| ----- | -------- | ---------------------------------------------- |
+| `sub` | `string` | Subject — authenticated user ID (UUID)         |
+| `tid` | `string` | Tenant ID — tenant scope for this token (UUID) |
+| `jti` | `string` | JWT ID — UUID, unique per token                |
+| `iat` | `number` | Issued-at (seconds since epoch, set by issuer) |
+| `exp` | `number` | Expiry (seconds since epoch)                   |
 
 All claims are **required**. `verifyAccessToken` throws `UnauthorizedError`
 for any token that is missing or contains the wrong type for any of them.
@@ -37,12 +37,12 @@ for any token that is missing or contains the wrong type for any of them.
 
 ## Algorithm
 
-| Setting          | Value                                |
-|------------------|--------------------------------------|
-| Algorithm        | `HS256` (HMAC-SHA256)                |
-| Library          | [`jose`](https://github.com/panva/jose) v6 |
-| Key              | `JWT_SECRET` env var (min 32 chars)  |
-| TTL              | `JWT_ACCESS_TTL_SECONDS` (default: `900` = 15 min) |
+| Setting   | Value                                              |
+| --------- | -------------------------------------------------- |
+| Algorithm | `HS256` (HMAC-SHA256)                              |
+| Library   | [`jose`](https://github.com/panva/jose) v6         |
+| Key       | `JWT_SECRET` env var (min 32 chars)                |
+| TTL       | `JWT_ACCESS_TTL_SECONDS` (default: `900` = 15 min) |
 
 ### Environment variables
 
@@ -55,6 +55,7 @@ JWT_ACCESS_TTL_SECONDS=900
 ```
 
 Generate a secure secret:
+
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
@@ -92,12 +93,12 @@ const payload = await verifyAccessToken(token, config.jwtSecret!);
 
 **Throws** `UnauthorizedError` in these cases:
 
-| Condition            | Message                              |
-|----------------------|--------------------------------------|
-| Token expired        | `"Token expired"`                    |
-| Bad signature        | `"Invalid token"`                    |
-| Malformed JWT        | `"Invalid token"`                    |
-| Missing claim        | `"Invalid token: missing <claim>"`   |
+| Condition     | Message                            |
+| ------------- | ---------------------------------- |
+| Token expired | `"Token expired"`                  |
+| Bad signature | `"Invalid token"`                  |
+| Malformed JWT | `"Invalid token"`                  |
+| Missing claim | `"Invalid token: missing <claim>"` |
 
 ---
 
@@ -106,22 +107,18 @@ const payload = await verifyAccessToken(token, config.jwtSecret!);
 `src/plugins/jwt-auth.ts` registers two decorators (via `fastify-plugin` to
 escape encapsulation):
 
-| Decorator                   | Type                     | Description                             |
-|-----------------------------|--------------------------|------------------------------------------|
-| `request.jwtUser`           | `AccessTokenPayload \| null` | Populated after `verifyJwt` runs     |
-| `app.verifyJwt`             | `preHandler`             | Extracts + verifies the Bearer token     |
+| Decorator         | Type                         | Description                          |
+| ----------------- | ---------------------------- | ------------------------------------ |
+| `request.jwtUser` | `AccessTokenPayload \| null` | Populated after `verifyJwt` runs     |
+| `app.verifyJwt`   | `preHandler`                 | Extracts + verifies the Bearer token |
 
 ### Using `verifyJwt` on a route
 
 ```typescript
-app.get(
-  "/api/resource",
-  { preHandler: [app.verifyJwt] },
-  async (req) => {
-    const { sub: userId, tid: tenantId } = req.jwtUser!;
-    // ...
-  },
-);
+app.get("/api/resource", { preHandler: [app.verifyJwt] }, async (req) => {
+  const { sub: userId, tid: tenantId } = req.jwtUser!;
+  // ...
+});
 ```
 
 ### Error responses
@@ -129,12 +126,12 @@ app.get(
 The `verifyJwt` preHandler throws typed `AppError` subclasses, which are
 serialised by `errorHandlerPlugin` into RFC 9457 Problem Details:
 
-| Condition                         | HTTP status | Error type                                      |
-|-----------------------------------|-------------|-------------------------------------------------|
-| No / malformed `Authorization`    | `401`       | `unauthorized`                                  |
-| Expired token                     | `401`       | `unauthorized`                                  |
-| Invalid / tampered token          | `401`       | `unauthorized`                                  |
-| `JWT_SECRET` not set (server bug) | `500`       | `internal`                                      |
+| Condition                         | HTTP status | Error type     |
+| --------------------------------- | ----------- | -------------- |
+| No / malformed `Authorization`    | `401`       | `unauthorized` |
+| Expired token                     | `401`       | `unauthorized` |
+| Invalid / tampered token          | `401`       | `unauthorized` |
+| `JWT_SECRET` not set (server bug) | `500`       | `internal`     |
 
 Tenant mismatch (e.g. accessing resources belonging to a different tenant)
 should be checked at the route/service layer and return `403 ForbiddenError`.

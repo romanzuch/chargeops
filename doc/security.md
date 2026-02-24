@@ -23,12 +23,12 @@ Argon2id was selected because:
 
 ### Parameters
 
-| Parameter    | Value           | Notes                              |
-|--------------|-----------------|------------------------------------|
-| `type`       | argon2id        | Best general-purpose profile       |
-| `memoryCost` | 19 456 KiB (19 MiB) | OWASP minimum recommendation  |
-| `timeCost`   | 2               | OWASP minimum recommendation       |
-| `parallelism`| 1               | Scale memory instead of threads    |
+| Parameter     | Value               | Notes                           |
+| ------------- | ------------------- | ------------------------------- |
+| `type`        | argon2id            | Best general-purpose profile    |
+| `memoryCost`  | 19 456 KiB (19 MiB) | OWASP minimum recommendation    |
+| `timeCost`    | 2                   | OWASP minimum recommendation    |
+| `parallelism` | 1                   | Scale memory instead of threads |
 
 Defined as `ARGON2_OPTIONS` in `src/security/password.ts`.
 
@@ -40,8 +40,8 @@ Defined as `ARGON2_OPTIONS` in `src/security/password.ts`.
 ```ts
 import { hashPassword, verifyPassword } from "../security/index.js";
 
-const hash = await hashPassword(plain);          // store in users.password_hash
-const ok   = await verifyPassword(plain, hash);  // boolean — never throws on mismatch
+const hash = await hashPassword(plain); // store in users.password_hash
+const ok = await verifyPassword(plain, hash); // boolean — never throws on mismatch
 ```
 
 The hash string is self-describing (algorithm + params + salt), so it can be stored
@@ -56,9 +56,9 @@ directly in the `password_hash` column and will survive parameter upgrades grace
 
 Enforced by `validatePasswordStrength(plain)` in `src/security/password.ts`.
 
-| Rule            | Value         |
-|-----------------|---------------|
-| Minimum length  | **12 characters** |
+| Rule           | Value             |
+| -------------- | ----------------- |
+| Minimum length | **12 characters** |
 
 The function returns a discriminated union — not an exception — so the caller controls
 how to surface the error:
@@ -152,18 +152,16 @@ import crypto from "node:crypto";
 import { randomTokenBytes, safeEqual } from "../security/index.js";
 
 // --- Issuance ---
-const raw            = randomTokenBytes(32);                        // 256-bit entropy
-const tokenForClient = raw.toString("base64url");                   // send in cookie / body
-const tokenForDb     = crypto.createHash("sha256")
-                             .update(raw)
-                             .digest("hex");                        // store in DB
+const raw = randomTokenBytes(32); // 256-bit entropy
+const tokenForClient = raw.toString("base64url"); // send in cookie / body
+const tokenForDb = crypto.createHash("sha256").update(raw).digest("hex"); // store in DB
 
 // INSERT INTO refresh_tokens (token_hash, …) VALUES (tokenForDb, …)
 
 // --- Validation ---
-const incoming    = Buffer.from(clientToken, "base64url");
+const incoming = Buffer.from(clientToken, "base64url");
 const incomingHash = crypto.createHash("sha256").update(incoming).digest("hex");
-const isValid      = safeEqual(incomingHash, storedHash);
+const isValid = safeEqual(incomingHash, storedHash);
 ```
 
 Why hash the token before storage? If the database is compromised, raw tokens cannot
@@ -204,11 +202,11 @@ import type { FastifyPluginAsync } from "fastify";
 import { TooManyRequestsError } from "../http/errors.js";
 
 const MAX_ATTEMPTS = 10;
-const WINDOW_MS    = 15 * 60 * 1000; // 15 minutes
+const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 
 export const authRateLimitPlugin: FastifyPluginAsync = async (app) => {
   app.addHook("preHandler", async (request) => {
-    const key      = `login:${normalizeEmail(request.body?.email ?? "")}`;
+    const key = `login:${normalizeEmail(request.body?.email ?? "")}`;
     const attempts = await rateLimiter.increment(key, WINDOW_MS);
     if (attempts > MAX_ATTEMPTS) {
       throw new TooManyRequestsError("Too many login attempts, please try again later");
@@ -219,11 +217,11 @@ export const authRateLimitPlugin: FastifyPluginAsync = async (app) => {
 
 ### State Store Options
 
-| Option                              | Pros                       | Cons                               |
-|-------------------------------------|----------------------------|------------------------------------|
-| In-memory (`@fastify/rate-limit`)   | Zero infra                 | Lost on restart, not distributed   |
-| PostgreSQL table                    | No extra infra dependency  | Slower, needs a cleanup job        |
-| Redis (`ioredis` + `@fastify/rate-limit`) | Fast, distributed   | Extra infra dependency             |
+| Option                                    | Pros                      | Cons                             |
+| ----------------------------------------- | ------------------------- | -------------------------------- |
+| In-memory (`@fastify/rate-limit`)         | Zero infra                | Lost on restart, not distributed |
+| PostgreSQL table                          | No extra infra dependency | Slower, needs a cleanup job      |
+| Redis (`ioredis` + `@fastify/rate-limit`) | Fast, distributed         | Extra infra dependency           |
 
 Start with `@fastify/rate-limit` (in-memory) for Sprint 3; migrate to Redis before
 multi-instance deployment.
@@ -234,8 +232,8 @@ multi-instance deployment.
 // src/http/errors.ts
 export class TooManyRequestsError extends AppError {
   readonly statusCode = 429;
-  readonly type       = "https://errors.chargeops.dev/too-many-requests";
-  readonly title      = "Too Many Requests";
+  readonly type = "https://errors.chargeops.dev/too-many-requests";
+  readonly title = "Too Many Requests";
 }
 ```
 

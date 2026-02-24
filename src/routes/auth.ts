@@ -1,4 +1,5 @@
-import type { FastifyPluginAsync } from "fastify";
+import "@fastify/cookie";
+import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import { ZodError } from "zod";
 import { config } from "../config/config.js";
 import { getDb } from "../db/kysely.js";
@@ -24,12 +25,18 @@ const COOKIE_SAME_SITE = "strict";
  * Follows Fastify plugin pattern. Registered in app.ts.
  */
 export const authRoutes: FastifyPluginAsync = async (app) => {
-  const db = getDb();
-  const authService = new AuthService(db, {
-    jwtSecret: config.jwtSecret!,
-    jwtAccessTtlSeconds: config.jwtAccessTtlSeconds,
-    jwtRefreshTtlSeconds: config.jwtRefreshTtlSeconds,
-  });
+  // Lazily initialized on first request so DB is not required at plugin registration time.
+  let authService: AuthService | undefined;
+  const getAuthService = (): AuthService => {
+    if (!authService) {
+      authService = new AuthService(getDb(), {
+        jwtSecret: config.jwtSecret!,
+        jwtAccessTtlSeconds: config.jwtAccessTtlSeconds,
+        jwtRefreshTtlSeconds: config.jwtRefreshTtlSeconds,
+      });
+    }
+    return authService;
+  };
 
   /**
    * POST /auth/register
@@ -52,16 +59,13 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     } catch (err) {
       if (err instanceof ZodError) {
         const errors = err.flatten().fieldErrors;
-        throw new BadRequestError(
-          "Validation failed",
-          JSON.stringify(errors)
-        );
+        throw new BadRequestError("Validation failed", JSON.stringify(errors));
       }
       throw err;
     }
 
     // Register user and generate tokens
-    const result = await authService.register({
+    const result = await getAuthService().register({
       email: validated.email,
       password: validated.password,
       ...(validated.name && { name: validated.name }),
@@ -71,14 +75,14 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     _setRefreshTokenCookie(reply, result.refreshToken);
 
     // Build response
-    const response = AccessTokenResponseSchema.parse({
+    const response: Record<string, unknown> = AccessTokenResponseSchema.parse({
       accessToken: result.accessToken,
       expiresIn: result.expiresIn,
     });
 
     // Optionally include refresh token in body
     if (config.refreshTokenInBody) {
-      (response as any).refreshToken = result.refreshToken;
+      response.refreshToken = result.refreshToken;
     }
 
     return reply.status(201).send(response);
@@ -105,16 +109,13 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     } catch (err) {
       if (err instanceof ZodError) {
         const errors = err.flatten().fieldErrors;
-        throw new BadRequestError(
-          "Validation failed",
-          JSON.stringify(errors)
-        );
+        throw new BadRequestError("Validation failed", JSON.stringify(errors));
       }
       throw err;
     }
 
     // Authenticate user
-    const result = await authService.login({
+    const result = await getAuthService().login({
       email: validated.email,
       password: validated.password,
     });
@@ -123,14 +124,14 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     _setRefreshTokenCookie(reply, result.refreshToken);
 
     // Build response
-    const response = AccessTokenResponseSchema.parse({
+    const response: Record<string, unknown> = AccessTokenResponseSchema.parse({
       accessToken: result.accessToken,
       expiresIn: result.expiresIn,
     });
 
     // Optionally include refresh token in body
     if (config.refreshTokenInBody) {
-      (response as any).refreshToken = result.refreshToken;
+      response.refreshToken = result.refreshToken;
     }
 
     return reply.send(response);
@@ -155,7 +156,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
    */
   app.post("/auth/refresh", async (req, reply) => {
     // Get refresh token from cookie or body
-    let refreshToken = (req as any).cookies?.[REFRESH_TOKEN_COOKIE_NAME];
+    let refreshToken: string | undefined = req.cookies[REFRESH_TOKEN_COOKIE_NAME];
     if (!refreshToken) {
       let validated;
       try {
@@ -163,10 +164,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       } catch (err) {
         if (err instanceof ZodError) {
           const errors = err.flatten().fieldErrors;
-          throw new BadRequestError(
-            "Validation failed",
-            JSON.stringify(errors)
-          );
+          throw new BadRequestError("Validation failed", JSON.stringify(errors));
         }
         throw err;
       }
@@ -182,7 +180,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     const tokenHash = await sha256Hex(tokenBuffer);
 
     // Refresh access token (rotates refresh token)
-    const result = await authService.refreshAccessToken({
+    const result = await getAuthService().refreshAccessToken({
       refreshTokenHash: tokenHash,
     });
 
@@ -190,14 +188,14 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     _setRefreshTokenCookie(reply, result.refreshToken);
 
     // Build response
-    const response = AccessTokenResponseSchema.parse({
+    const response: Record<string, unknown> = AccessTokenResponseSchema.parse({
       accessToken: result.accessToken,
       expiresIn: result.expiresIn,
     });
 
     // Optionally include refresh token in body
     if (config.refreshTokenInBody) {
-      (response as any).refreshToken = result.refreshToken;
+      response.refreshToken = result.refreshToken;
     }
 
     return reply.send(response);
@@ -222,7 +220,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
    */
   app.post("/auth/logout", async (req, reply) => {
     // Get refresh token from cookie or body
-    let refreshToken = (req as any).cookies?.[REFRESH_TOKEN_COOKIE_NAME];
+    let refreshToken: string | undefined = req.cookies[REFRESH_TOKEN_COOKIE_NAME];
     if (!refreshToken) {
       let validated;
       try {
@@ -230,10 +228,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       } catch (err) {
         if (err instanceof ZodError) {
           const errors = err.flatten().fieldErrors;
-          throw new BadRequestError(
-            "Validation failed",
-            JSON.stringify(errors)
-          );
+          throw new BadRequestError("Validation failed", JSON.stringify(errors));
         }
         throw err;
       }
@@ -249,10 +244,10 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     const tokenHash = await sha256Hex(tokenBuffer);
 
     // Revoke token family
-    await authService.logout({ refreshTokenHash: tokenHash });
+    await getAuthService().logout({ refreshTokenHash: tokenHash });
 
     // Clear refresh token cookie
-    (reply as any).clearCookie(REFRESH_TOKEN_COOKIE_NAME, {
+    reply.clearCookie(REFRESH_TOKEN_COOKIE_NAME, {
       path: COOKIE_PATH,
     });
 
@@ -270,28 +265,21 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
    * Errors:
    * - 401: missing or invalid token
    */
-  app.get(
-    "/me",
-    { preHandler: [app.verifyJwt] },
-    async (req) => {
-      // Request is already verified by preHandler
-      const user = await authService.getCurrentUser({
-        userId: req.jwtUser!.sub,
-        tenantId: req.jwtUser!.tid,
-      });
+  app.get("/me", { preHandler: [app.verifyJwt] }, async (req) => {
+    // Request is already verified by preHandler
+    const user = await getAuthService().getCurrentUser({
+      userId: req.jwtUser!.sub,
+      tenantId: req.jwtUser!.tid,
+    });
 
-      return CurrentUserResponseSchema.parse(user);
-    }
-  );
+    return CurrentUserResponseSchema.parse(user);
+  });
 };
 
 /**
  * Helper: Set refresh token as HttpOnly cookie.
  */
-function _setRefreshTokenCookie(
-  reply: any,
-  tokenBase64Url: string
-): void {
+function _setRefreshTokenCookie(reply: FastifyReply, tokenBase64Url: string): void {
   reply.setCookie(REFRESH_TOKEN_COOKIE_NAME, tokenBase64Url, {
     path: COOKIE_PATH,
     httpOnly: true,

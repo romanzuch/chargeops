@@ -14,6 +14,6 @@ describe("parseEnv", () => {
   });
 
   it("throws on invalid PORT", () => {
-    expect(() => parseEnv({ PORT: "99999"})).toThrow(/Invalid environment variable/);
+    expect(() => parseEnv({ PORT: "99999" })).toThrow(/Invalid environment variable/);
   });
 });

@@ -40,10 +40,7 @@ export async function findValidRefreshTokenByHash(
     .executeTakeFirst();
 }
 
-export async function revokeByFamily(
-  db: Kysely<Database>,
-  familyId: string,
-): Promise<void> {
+export async function revokeByFamily(db: Kysely<Database>, familyId: string): Promise<void> {
   await db
     .updateTable("refresh_tokens")
     .set({ revoked_at: sql<Date>`now()` })
@@ -52,10 +49,7 @@ export async function revokeByFamily(
     .execute();
 }
 
-export async function revokeAllForUser(
-  db: Kysely<Database>,
-  userId: string,
-): Promise<void> {
+export async function revokeAllForUser(db: Kysely<Database>, userId: string): Promise<void> {
   await db
     .updateTable("refresh_tokens")
     .set({ revoked_at: sql<Date>`now()` })

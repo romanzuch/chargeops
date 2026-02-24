@@ -8,14 +8,14 @@ The goal of this project is to provide a solid, production-ready foundation for 
 
 ## Tech Stack
 
-* Node.js (ESM)
-* TypeScript
-* Fastify
-* PostgreSQL
-* Kysely (SQL-first query builder)
-* Zod (environment validation)
-* Vitest (testing)
-* Docker / Docker Compose
+- Node.js (ESM)
+- TypeScript
+- Fastify
+- PostgreSQL
+- Kysely (SQL-first query builder)
+- Zod (environment validation)
+- Vitest (testing)
+- Docker / Docker Compose
 
 ---
 
@@ -105,29 +105,29 @@ npm test
 
 Integration tests automatically:
 
-* spin up a test database
-* reset schema
-* apply migrations
+- spin up a test database
+- reset schema
+- apply migrations
 
 ---
 
 ## Design Principles
 
-* SQL-first database design
-* Strong type safety end-to-end
-* Centralized error handling (Problem Details format)
-* Clean separation of concerns
-* Testable app factory (`buildApp()`)
+- SQL-first database design
+- Strong type safety end-to-end
+- Centralized error handling (Problem Details format)
+- Clean separation of concerns
+- Testable app factory (`buildApp()`)
 
 ---
 
 ## Next Milestones
 
-* Authentication (JWT + refresh tokens)
-* Multi-tenancy support
-* Role-based access control
-* Billing domain models (charges, invoices)
-* CI pipeline (GitHub Actions)
+- Authentication (JWT + refresh tokens)
+- Multi-tenancy support
+- Role-based access control
+- Billing domain models (charges, invoices)
+- CI pipeline (GitHub Actions)
 
 ---
 

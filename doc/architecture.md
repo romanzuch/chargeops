@@ -6,9 +6,9 @@ The application is built using a factory function (`buildApp`) instead of instan
 
 This enables:
 
-* Clean testability via `app.inject()`
-* Dependency injection in the future
-* Decoupled bootstrapping logic
+- Clean testability via `app.inject()`
+- Dependency injection in the future
+- Decoupled bootstrapping logic
 
 ---
 
@@ -16,8 +16,8 @@ This enables:
 
 Cross-cutting concerns are implemented as Fastify plugins:
 
-* Request context (request ID, timing)
-* Error handling (Problem Details)
+- Request context (request ID, timing)
+- Error handling (Problem Details)
 
 This keeps the main application logic clean and modular.
 
@@ -33,9 +33,9 @@ application/problem+json
 
 Benefits:
 
-* Consistent API contract
-* Better frontend integration
-* Easier debugging
+- Consistent API contract
+- Better frontend integration
+- Easier debugging
 
 ---
 
@@ -43,15 +43,15 @@ Benefits:
 
 The project uses:
 
-* PostgreSQL
-* Kysely for typed SQL queries
-* Raw SQL migration files
+- PostgreSQL
+- Kysely for typed SQL queries
+- Raw SQL migration files
 
 Design principles:
 
-* SQL-first approach
-* Explicit schema evolution
-* Avoid heavy ORM abstractions
+- SQL-first approach
+- Explicit schema evolution
+- Avoid heavy ORM abstractions
 
 ---
 
@@ -63,8 +63,8 @@ If validation fails, the application exits immediately.
 
 This prevents:
 
-* Misconfigured production deployments
-* Silent runtime configuration bugs
+- Misconfigured production deployments
+- Silent runtime configuration bugs
 
 ---
 
@@ -72,10 +72,10 @@ This prevents:
 
 Integration tests:
 
-* Spin up test database
-* Reset schema
-* Apply migrations
-* Use `app.inject()` for HTTP-level testing
+- Spin up test database
+- Reset schema
+- Apply migrations
+- Use `app.inject()` for HTTP-level testing
 
 This ensures realistic but deterministic test execution.
 
@@ -83,7 +83,7 @@ This ensures realistic but deterministic test execution.
 
 ## Future Architecture Extensions
 
-* Auth module (JWT + refresh token rotation)
-* Multi-tenant context isolation
-* Domain-driven module boundaries
-* Event-driven extensions (optional)
+- Auth module (JWT + refresh token rotation)
+- Multi-tenant context isolation
+- Domain-driven module boundaries
+- Event-driven extensions (optional)

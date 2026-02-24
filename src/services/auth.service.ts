@@ -1,28 +1,12 @@
 import { randomUUID } from "node:crypto";
 import type { Kysely } from "kysely";
 import type { Database } from "../db/types.js";
-import {
-  BadRequestError,
-  ConflictError,
-  UnauthorizedError,
-} from "../http/errors.js";
-import {
-  hashPassword,
-  validatePasswordStrength,
-  verifyPassword,
-} from "../security/password.js";
+import { BadRequestError, UnauthorizedError } from "../http/errors.js";
+import { hashPassword, validatePasswordStrength, verifyPassword } from "../security/password.js";
 import { normalizeEmail } from "../security/email.js";
-import {
-  randomTokenBytes,
-  sha256Hex,
-} from "../security/tokens.js";
-import { safeEqual } from "../security/safe-compare.js";
+import { randomTokenBytes, sha256Hex } from "../security/tokens.js";
 import { signAccessToken } from "./jwt.service.js";
-import {
-  createUser,
-  findUserByEmail,
-  findUserById,
-} from "../repositories/users.repo.js";
+import { createUser, findUserByEmail, findUserById } from "../repositories/users.repo.js";
 import {
   createRefreshToken,
   findValidRefreshTokenByHash,
@@ -81,7 +65,7 @@ export interface CurrentUserInput {
 export class AuthService {
   constructor(
     private db: Kysely<Database>,
-    private config: Config
+    private config: Config,
   ) {}
 
   /**
@@ -204,7 +188,7 @@ export class AuthService {
         tenantId: token.tenant_id,
       },
       this.config.jwtSecret,
-      this.config.jwtAccessTtlSeconds
+      this.config.jwtAccessTtlSeconds,
     );
 
     return {
@@ -265,7 +249,7 @@ export class AuthService {
   private async _generateAuthResult(
     userId: string,
     email: string,
-    tenantId: string
+    tenantId: string,
   ): Promise<AuthResult> {
     // Generate refresh token (raw bytes, to be hashed for storage)
     const refreshTokenRaw = randomTokenBytes();
@@ -286,7 +270,7 @@ export class AuthService {
     const accessToken = await signAccessToken(
       { userId, tenantId },
       this.config.jwtSecret,
-      this.config.jwtAccessTtlSeconds
+      this.config.jwtAccessTtlSeconds,
     );
 
     return {

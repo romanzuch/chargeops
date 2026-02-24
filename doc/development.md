@@ -24,8 +24,8 @@ npm run dev
 
 ## Environment Files
 
-* `.env` for local development
-* `.env.test` for integration tests
+- `.env` for local development
+- `.env.test` for integration tests
 
 Never commit real secrets.
 
@@ -45,18 +45,18 @@ They are executed in alphabetical order.
 
 Best practice:
 
-* Wrap migration steps in transactions
-* Never modify old migrations
-* Create new migration files for schema changes
+- Wrap migration steps in transactions
+- Never modify old migrations
+- Create new migration files for schema changes
 
 ---
 
 ## Code Style
 
-* Strict TypeScript
-* No `any`
-* Explicit return types for exported functions
-* Small, focused modules
+- Strict TypeScript
+- No `any`
+- Explicit return types for exported functions
+- Small, focused modules
 
 ---
 
@@ -71,14 +71,14 @@ Best practice:
 
 ## Logging
 
-* Pino logger (via Fastify)
-* Sensitive fields redacted
-* Request ID included in responses
+- Pino logger (via Fastify)
+- Sensitive fields redacted
+- Request ID included in responses
 
 ---
 
 ## Debugging Tips
 
-* Use `/health` endpoint for quick validation
-* Enable debug logging via environment variable
-* Check database connection on startup errors
+- Use `/health` endpoint for quick validation
+- Enable debug logging via environment variable
+- Check database connection on startup errors

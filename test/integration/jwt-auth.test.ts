@@ -19,13 +19,9 @@ describe("jwtAuthPlugin / verifyJwt preHandler", () => {
 
     // Register a lightweight protected route for this test suite.
     await app.register(async (scope) => {
-      scope.get(
-        "/test/jwt-protected",
-        { preHandler: [app.verifyJwt] },
-        async (req) => {
-          return { userId: req.jwtUser!.sub, tenantId: req.jwtUser!.tid };
-        },
-      );
+      scope.get("/test/jwt-protected", { preHandler: [app.verifyJwt] }, async (req) => {
+        return { userId: req.jwtUser!.sub, tenantId: req.jwtUser!.tid };
+      });
     });
 
     await app.ready();
@@ -62,11 +58,7 @@ describe("jwtAuthPlugin / verifyJwt preHandler", () => {
   });
 
   it("returns 401 for a malformed Authorization header (no Bearer prefix)", async () => {
-    const token = await signAccessToken(
-      { userId: "u", tenantId: "t" },
-      JWT_SECRET,
-      TTL,
-    );
+    const token = await signAccessToken({ userId: "u", tenantId: "t" }, JWT_SECRET, TTL);
 
     const res = await app.inject({
       method: "GET",
@@ -78,11 +70,7 @@ describe("jwtAuthPlugin / verifyJwt preHandler", () => {
   });
 
   it("returns 401 for an invalid (tampered) token", async () => {
-    const token = await signAccessToken(
-      { userId: "u", tenantId: "t" },
-      JWT_SECRET,
-      TTL,
-    );
+    const token = await signAccessToken({ userId: "u", tenantId: "t" }, JWT_SECRET, TTL);
     const parts = token.split(".");
     parts[2] = "badsignature";
     const tampered = parts.join(".");

@@ -24,9 +24,7 @@ function requireEnv(name: string): string {
 let db: Kysely<Database>;
 
 /** Seed a tenant and user, returning their IDs. */
-async function seedUserAndTenant(
-  label: string,
-): Promise<{ userId: string; tenantId: string }> {
+async function seedUserAndTenant(label: string): Promise<{ userId: string; tenantId: string }> {
   const tenant = await db
     .insertInto("tenants")
     .values({ name: `Tenant-${label}-${Date.now()}` })
