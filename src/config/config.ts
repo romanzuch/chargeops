@@ -11,4 +11,10 @@ export const config = {
    */
   databaseUrl: env.DATABASE_URL,
   logLevel: env.LOG_LEVEL ?? (env.NODE_ENV === "production" ? "info" : "debug"),
+  /**
+   * Optional: only required when the JWT auth plugin is in use.
+   * The plugin will throw InternalServerError at request time if unset.
+   */
+  jwtSecret: env.JWT_SECRET,
+  jwtAccessTtlSeconds: env.JWT_ACCESS_TTL_SECONDS,
 } as const;

@@ -13,6 +13,15 @@ const EnvSchema = z.object({
    * @see https://getpino.io/#/docs/api?id=level-string
    */
   LOG_LEVEL: z.string().optional(),
+  /**
+   * HMAC secret for signing JWTs (HS256).
+   * Minimum 32 characters (256 bits) required by NIST for HMAC-SHA256.
+   */
+  JWT_SECRET: z.string().min(32).optional(),
+  /**
+   * Access token lifetime in seconds. Default: 900 (15 minutes).
+   */
+  JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
