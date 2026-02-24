@@ -22,6 +22,18 @@ const EnvSchema = z.object({
    * Access token lifetime in seconds. Default: 900 (15 minutes).
    */
   JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900),
+  /**
+   * Refresh token lifetime in seconds. Default: 2592000 (30 days).
+   */
+  JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().positive().default(2592000),
+  /**
+   * Include refresh token in response body as fallback for non-browser clients.
+   * Default: false (refresh token only in httpOnly cookie).
+   */
+  REFRESH_TOKEN_IN_BODY: z
+    .enum(["true", "false"])
+    .transform((v) => v === "true")
+    .default(false),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
