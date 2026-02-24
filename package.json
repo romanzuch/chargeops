@@ -20,6 +20,7 @@
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "argon2": "^0.44.0",
     "dotenv": "^17.3.1",
     "fastify": "^5.7.4",
     "kysely": "^0.28.11",
