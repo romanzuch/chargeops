@@ -265,7 +265,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
    * Errors:
    * - 401: missing or invalid token
    */
-  app.get("/me", { preHandler: [app.verifyJwt] }, async (req) => {
+  app.get("/me", { preHandler: [app.verifyJwt, app.verifyTenant] }, async (req) => {
     // Request is already verified by preHandler
     const user = await getAuthService().getCurrentUser({
       userId: req.jwtUser!.sub,
