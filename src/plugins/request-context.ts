@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from "fastify";
+import fp from "fastify-plugin";
 import crypto from "node:crypto";
 
 /**
@@ -8,8 +8,11 @@ import crypto from "node:crypto";
  * - Keeps `buildApp()` small and focused.
  * - Reusable across apps (API, worker, admin, ...).
  * - Easy to unit-test / disable.
+ *
+ * Wrapped with fastify-plugin to disable encapsulation: hooks registered here
+ * apply to all routes in the app, not just routes within this plugin's scope.
  */
-export const requestContextPlugin: FastifyPluginAsync = async (app) => {
+export const requestContextPlugin = fp(async (app) => {
   app.addHook("onRequest", async (request, reply) => {
     // Start timing as early as possible.
     request.startTime = process.hrtime.bigint();
@@ -45,7 +48,7 @@ export const requestContextPlugin: FastifyPluginAsync = async (app) => {
       "request completed",
     );
   });
-};
+}, { name: "request-context" });
 
 /**
  * Centralized request id generator.
