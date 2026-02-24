@@ -13,6 +13,12 @@ import {
   rotateRefreshToken,
   revokeByFamily,
 } from "../repositories/refresh-tokens.repo.js";
+import {
+  createTenant,
+  createUserTenantRole,
+  findFirstTenantForUser,
+  findUserRoleInTenant,
+} from "../repositories/tenants.repo.js";
 
 export interface Config {
   jwtSecret: string;
@@ -73,14 +79,14 @@ export class AuthService {
    *
    * - Validates password strength
    * - Hashes password with argon2id
-   * - Creates user in database (throws ConflictError if email exists)
+   * - Creates user, a default tenant, and an admin role assignment in one transaction
    * - Generates access and refresh tokens
    *
    * @throws BadRequestError if password is too weak or invalid
    * @throws ConflictError if email is already registered
    */
   async register(input: RegisterInput): Promise<AuthResult> {
-    // Validate password strength early
+    // Validate password strength early (before any DB work)
     const passwordCheck = validatePasswordStrength(input.password);
     if (!passwordCheck.ok) {
       throw new BadRequestError(passwordCheck.reason);
@@ -92,20 +98,24 @@ export class AuthService {
     // Hash password with argon2id (OWASP-compliant)
     const passwordHash = await hashPassword(input.password);
 
-    // Create user in database; ConflictError thrown if email exists
-    const user = await createUser(this.db, {
-      email,
-      passwordHash,
+    // Create user, default tenant, and role assignment atomically.
+    // ConflictError from createUser propagates out of the transaction, rolling it back.
+    const { user, tenantId } = await this.db.transaction().execute(async (trx) => {
+      const user = await createUser(trx, { email, passwordHash });
+
+      // Use the email domain as the default tenant name (e.g. "example.com")
+      const tenantName = email.split("@")[1] ?? email;
+      const tenant = await createTenant(trx, { name: tenantName });
+
+      await createUserTenantRole(trx, {
+        userId: user.id,
+        tenantId: tenant.id,
+        role: "admin",
+      });
+
+      return { user, tenantId: tenant.id };
     });
 
-    // For new registrations, default to first tenant (if user has one)
-    // TODO: In future, allow selecting tenant during registration
-    // For now, we need to fetch a tenant_id — using a placeholder UUID or
-    // returning error if no tenants exist. For MVP, we'll create a default tenant.
-    // For now, throw an error indicating tenant setup is needed.
-    const tenantId = randomUUID(); // Placeholder: should fetch user's default tenant
-
-    // Generate tokens
     return this._generateAuthResult(user.id, email, tenantId);
   }
 
@@ -114,11 +124,12 @@ export class AuthService {
    *
    * - Looks up user by email
    * - Verifies password against stored hash (timing-safe)
+   * - Resolves the user's default tenant from user_tenant_roles
    * - Generates access and refresh tokens
    *
    * Never reveals whether email or password was wrong (generic error).
    *
-   * @throws UnauthorizedError if user not found or password mismatch
+   * @throws UnauthorizedError if user not found, password mismatch, or no tenant assigned
    */
   async login(input: LoginInput): Promise<AuthResult> {
     const email = normalizeEmail(input.email);
@@ -135,11 +146,13 @@ export class AuthService {
       throw new UnauthorizedError("Invalid credentials");
     }
 
-    // For now, default to first tenant; TODO: allow tenant selection
-    const tenantId = randomUUID(); // Placeholder
+    // Resolve default tenant (first by creation time)
+    const tenantInfo = await findFirstTenantForUser(this.db, user.id);
+    if (!tenantInfo) {
+      throw new UnauthorizedError("No tenant assigned to this account");
+    }
 
-    // Generate tokens
-    return this._generateAuthResult(user.id, email, tenantId);
+    return this._generateAuthResult(user.id, email, tenantInfo.tenantId);
   }
 
   /**
@@ -224,7 +237,7 @@ export class AuthService {
   /**
    * Fetches current user details (for GET /me endpoint).
    *
-   * @throws UnauthorizedError if user not found
+   * @throws UnauthorizedError if user not found or not a member of the given tenant
    */
   async getCurrentUser(input: CurrentUserInput) {
     const user = await findUserById(this.db, input.userId);
@@ -232,8 +245,10 @@ export class AuthService {
       throw new UnauthorizedError("User not found");
     }
 
-    // TODO: Fetch role from user_tenant_roles table
-    const role = "admin" as const; // Placeholder
+    const role = await findUserRoleInTenant(this.db, input.userId, input.tenantId);
+    if (!role) {
+      throw new UnauthorizedError("User does not belong to this tenant");
+    }
 
     return {
       userId: user.id,
