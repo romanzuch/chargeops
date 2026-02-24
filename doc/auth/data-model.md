@@ -96,3 +96,4 @@ derived from the same rotation chain.
 | ------------------------------ | ----------------------------------------------------- |
 | `001_init.sql`                 | Base schema: tenants, users, roles, refresh_tokens    |
 | `002_refresh_token_family.sql` | Adds `family_id` column and index to `refresh_tokens` |
+| `003_stations.sql`             | Creates the `stations` table                          |
