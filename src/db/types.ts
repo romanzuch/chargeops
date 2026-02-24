@@ -7,43 +7,49 @@
  * 3) Use Kysely to get end-to-end type safety
  */
 
+import type { Generated } from "kysely";
+
 export type Role = "admin" | "operator" | "viewer";
 
 /**
  * Notes on timestamps:
  * - In SQL we use `timestamptz`
  * - In Node we model it as `Date`
+ *
+ * Columns marked Generated<T> have a DB-level default and are optional in
+ * INSERT statements (Kysely's Insertable<T> helper makes them optional).
  */
 type Timestamp = Date;
 
 export interface TenantsTable {
-  id: string; // uuid
+  id: Generated<string>; // uuid, gen_random_uuid()
   name: string;
-  created_at: Timestamp;
+  created_at: Generated<Timestamp>;
 }
 
 export interface UsersTable {
-  id: string; // uuid
+  id: Generated<string>; // uuid, gen_random_uuid()
   email: string;
   password_hash: string;
-  created_at: Timestamp;
+  created_at: Generated<Timestamp>;
 }
 
 export interface UserTenantRolesTable {
   user_id: string; // uuid
   tenant_id: string; // uuid
   role: Role;
-  created_at: Timestamp;
+  created_at: Generated<Timestamp>;
 }
 
 export interface RefreshTokensTable {
-  id: string; // uuid
+  id: Generated<string>; // uuid, gen_random_uuid()
   user_id: string; // uuid
   tenant_id: string; // uuid
+  family_id: Generated<string>; // uuid, gen_random_uuid() — callers may override
   token_hash: string;
   expires_at: Timestamp;
   revoked_at: Timestamp | null;
-  created_at: Timestamp;
+  created_at: Generated<Timestamp>;
 }
 
 /**
