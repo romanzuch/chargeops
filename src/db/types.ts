@@ -10,6 +10,7 @@
 import type { Generated } from "kysely";
 
 export type Role = "admin" | "operator" | "viewer";
+export type StationStatus = "active" | "planning" | "inactive" | "error";
 
 /**
  * Notes on timestamps:
@@ -52,6 +53,19 @@ export interface RefreshTokensTable {
   created_at: Generated<Timestamp>;
 }
 
+export interface StationsTable {
+  id: Generated<string>; // uuid, gen_random_uuid()
+  external_id: string | null;
+  name: string;
+  tenant_id: string; // uuid
+  latitude: number | null;
+  longitude: number | null;
+  status: Generated<StationStatus>; // default 'active'
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+}
+
 /**
  * Root DB type for Kysely.
  *
@@ -62,4 +76,5 @@ export interface Database {
   users: UsersTable;
   user_tenant_roles: UserTenantRolesTable;
   refresh_tokens: RefreshTokensTable;
+  stations: StationsTable;
 }
