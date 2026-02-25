@@ -5,9 +5,11 @@ All repository functions are pure DB-access helpers. They accept a
 transaction) and return plain row types. No business logic lives here —
 that belongs in `StationsService`.
 
-Every function enforces tenant isolation at the SQL level by including
-`tenant_id` as a `WHERE` clause on reads and updates, and as an insert
-column on writes.
+Write functions and tenant-scoped reads enforce isolation at the SQL level by
+including `tenant_id` in every query. The two public read functions
+(`findPublicStations`, `findPublicStationById`) intentionally omit the tenant
+filter — they return matching stations across all tenants, gated only by
+`visibility = 'public'`.
 
 ---
 
@@ -24,7 +26,8 @@ Inserts a new station row and returns it.
 | `input.externalId` | `string`        | Optional                                    |
 | `input.latitude`   | `number`        | Optional                                    |
 | `input.longitude`  | `number`        | Optional                                    |
-| `input.status`     | `StationStatus` | Optional; DB defaults to `'active'`         |
+| `input.status`     | `StationStatus`     | Optional; DB defaults to `'active'`         |
+| `input.visibility` | `StationVisibility` | Optional; DB defaults to `'public'`         |
 
 Only the fields that are explicitly provided in `input` are included in the
 `INSERT` — omitted optional fields fall back to their DB defaults.
@@ -45,6 +48,7 @@ matching row was found.
 | `input.latitude`   | `number \| null`    | Optional; pass `null` to clear the column          |
 | `input.longitude`  | `number \| null`    | Optional; pass `null` to clear the column          |
 | `input.status`     | `StationStatus`     | Optional                                           |
+| `input.visibility` | `StationVisibility` | Optional                                           |
 
 The `WHERE` clause is:
 
@@ -70,6 +74,32 @@ if no matching live (non-soft-deleted) record exists.
 ```sql
 WHERE id = $stationId
   AND tenant_id = $tenantId
+  AND deleted_at IS NULL
+```
+
+---
+
+### `findPublicStations(db): Promise<StationsTable[]>`
+
+Returns all non-deleted stations with `visibility = 'public'`. No tenant filter —
+this is the data source for the public station discovery endpoints used by EV drivers.
+
+```sql
+WHERE visibility = 'public'
+  AND deleted_at IS NULL
+```
+
+---
+
+### `findPublicStationById(db, stationId): Promise<StationsTable | undefined>`
+
+Returns a single public station by ID, or `undefined` if the station does not exist,
+is soft-deleted, or has `visibility = 'private'`. All three cases surface as 404 at
+the route level to prevent ID enumeration.
+
+```sql
+WHERE id = $stationId
+  AND visibility = 'public'
   AND deleted_at IS NULL
 ```
 

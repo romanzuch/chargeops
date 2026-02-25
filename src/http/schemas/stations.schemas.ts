@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 const stationStatusSchema = z.enum(["active", "planning", "inactive", "error"]);
+const stationVisibilitySchema = z.enum(["public", "private"]);
 
 /**
  * POST /stations request body.
@@ -9,6 +10,7 @@ const stationStatusSchema = z.enum(["active", "planning", "inactive", "error"]);
  * - external_id: optional reference to an external system
  * - latitude / longitude: both optional, but must be provided together
  * - status: optional (DB defaults to 'active')
+ * - visibility: optional (DB defaults to 'public')
  */
 export const CreateStationBodySchema = z
   .object({
@@ -17,6 +19,7 @@ export const CreateStationBodySchema = z
     latitude: z.number().min(-90).max(90).optional(),
     longitude: z.number().min(-180).max(180).optional(),
     status: stationStatusSchema.optional(),
+    visibility: stationVisibilitySchema.optional(),
   })
   .superRefine((data, ctx) => {
     const hasLat = data.latitude !== undefined;
@@ -45,6 +48,7 @@ export const UpdateStationBodySchema = z
     latitude: z.number().min(-90).max(90).nullable().optional(),
     longitude: z.number().min(-180).max(180).nullable().optional(),
     status: stationStatusSchema.optional(),
+    visibility: stationVisibilitySchema.optional(),
   })
   .superRefine((data, ctx) => {
     const hasFields = Object.values(data).some((v) => v !== undefined);
@@ -78,6 +82,7 @@ export const StationResponseSchema = z.object({
   latitude: z.number().nullable(),
   longitude: z.number().nullable(),
   status: stationStatusSchema,
+  visibility: stationVisibilitySchema,
   createdAt: z.string(),
   updatedAt: z.string(),
   deletedAt: z.string().nullable(),
