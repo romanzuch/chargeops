@@ -5,9 +5,11 @@ import { errorHandlerPlugin } from "./plugins/error-handler.js";
 import { jwtAuthPlugin } from "./plugins/jwt-auth.js";
 import { tenantContextPlugin } from "./plugins/tenant-context.js";
 import { genRequestId, requestContextPlugin } from "./plugins/request-context.js";
+import { adminRoutes } from "./routes/admin.js";
 import { authRoutes } from "./routes/auth.js";
 import { healthRoutes } from "./routes/health.js";
 import { stationRoutes } from "./routes/stations.js";
+import { tenantRoutes } from "./routes/tenants.js";
 
 /**
  * Builds the Fastify application.
@@ -41,6 +43,8 @@ export function buildApp(): FastifyInstance {
   app.register(authRoutes);
   app.register(healthRoutes);
   app.register(stationRoutes);
+  app.register(adminRoutes);
+  app.register(tenantRoutes);
 
   return app;
 }

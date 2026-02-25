@@ -1,5 +1,6 @@
 import type { Kysely, Selectable } from "kysely";
 import type { Database, Role, TenantsTable, UserTenantRolesTable } from "../db/types.js";
+import { NotFoundError } from "../http/errors.js";
 
 export async function createTenant(
   db: Kysely<Database>,
@@ -25,6 +26,26 @@ export async function createUserTenantRole(
     })
     .returningAll()
     .executeTakeFirstOrThrow();
+}
+
+export async function findTenantById(
+  db: Kysely<Database>,
+  id: string,
+): Promise<Selectable<TenantsTable>> {
+  const row = await db
+    .selectFrom("tenants")
+    .selectAll()
+    .where("id", "=", id)
+    .executeTakeFirst();
+
+  if (!row) throw new NotFoundError(`Tenant not found: ${id}`);
+  return row;
+}
+
+export async function findAllTenants(
+  db: Kysely<Database>,
+): Promise<Selectable<TenantsTable>[]> {
+  return db.selectFrom("tenants").selectAll().orderBy("created_at", "asc").execute();
 }
 
 /**

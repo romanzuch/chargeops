@@ -32,11 +32,13 @@ const passwordSchema = z
  *
  * - email: canonical email (normalized to lowercase)
  * - password: minimum 12 characters
+ * - tenantId: UUID of an existing tenant to join (required; see GET /tenants)
  * - name: optional display name (reserved for future use)
  */
 export const RegisterRequestSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
+  tenantId: z.string().uuid("tenantId must be a valid UUID"),
   name: z.string().max(255).optional(),
 });
 
@@ -113,8 +115,8 @@ export type AuthResponseWithRefresh = z.infer<typeof AuthResponseWithRefreshSche
 export const CurrentUserResponseSchema = z.object({
   userId: z.string(),
   email: z.string().email(),
-  tenantId: z.string(),
-  role: z.enum(["admin", "operator", "viewer"]),
+  tenantId: z.string().nullable(),
+  role: z.enum(["super_admin", "tenant_admin", "tenant_view", "driver"]),
 });
 
 export type CurrentUserResponse = z.infer<typeof CurrentUserResponseSchema>;

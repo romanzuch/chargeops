@@ -83,7 +83,6 @@ This ensures realistic but deterministic test execution.
 
 ## Future Architecture Extensions
 
-- Auth module (JWT + refresh token rotation)
-- Multi-tenant context isolation
 - Domain-driven module boundaries
 - Event-driven extensions (optional)
+- OpenAPI / Swagger generation from Zod schemas

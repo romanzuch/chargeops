@@ -12,6 +12,8 @@ const X_TENANT_ID_HEADER = "x-tenant-id";
  * `request.jwtUser` which is populated by that plugin.
  *
  * Behaviour:
+ * - Super admins (isSuperAdmin === true) bypass tenant validation; `request.tenantId`
+ *   is set to null (they are cross-tenant).
  * - If `x-tenant-id` header is present it must match the `tid` claim in the
  *   JWT, otherwise 403 Forbidden is returned.
  * - If the header is absent the `tid` claim is used directly.
@@ -25,7 +27,7 @@ const X_TENANT_ID_HEADER = "x-tenant-id";
  * Usage:
  * ```ts
  * app.get('/protected', { preHandler: [app.verifyJwt, app.verifyTenant] }, async (req) => {
- *   return { tenantId: req.tenantId! };
+ *   return { tenantId: req.tenantId };
  * });
  * ```
  */
@@ -38,6 +40,12 @@ export const tenantContextPlugin = fp(
       if (!request.jwtUser) {
         // verifyJwt was not in the preHandler chain before verifyTenant.
         throw new UnauthorizedError("Authentication required");
+      }
+
+      // Super admins are cross-tenant — skip tenant resolution entirely.
+      if (request.jwtUser.isSuperAdmin) {
+        request.tenantId = null;
+        return;
       }
 
       const tokenTid = request.jwtUser.tid;

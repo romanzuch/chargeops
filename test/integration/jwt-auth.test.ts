@@ -33,7 +33,7 @@ describe("jwtAuthPlugin / verifyJwt preHandler", () => {
 
   it("returns 200 and claims for a valid Bearer token", async () => {
     const token = await signAccessToken(
-      { userId: "user-1", tenantId: "tenant-1" },
+      { userId: "user-1", tenantId: "tenant-1", isSuperAdmin: false },
       JWT_SECRET,
       TTL,
     );
@@ -58,7 +58,11 @@ describe("jwtAuthPlugin / verifyJwt preHandler", () => {
   });
 
   it("returns 401 for a malformed Authorization header (no Bearer prefix)", async () => {
-    const token = await signAccessToken({ userId: "u", tenantId: "t" }, JWT_SECRET, TTL);
+    const token = await signAccessToken(
+      { userId: "u", tenantId: "t", isSuperAdmin: false },
+      JWT_SECRET,
+      TTL,
+    );
 
     const res = await app.inject({
       method: "GET",
@@ -70,7 +74,11 @@ describe("jwtAuthPlugin / verifyJwt preHandler", () => {
   });
 
   it("returns 401 for an invalid (tampered) token", async () => {
-    const token = await signAccessToken({ userId: "u", tenantId: "t" }, JWT_SECRET, TTL);
+    const token = await signAccessToken(
+      { userId: "u", tenantId: "t", isSuperAdmin: false },
+      JWT_SECRET,
+      TTL,
+    );
     const parts = token.split(".");
     parts[2] = "badsignature";
     const tampered = parts.join(".");

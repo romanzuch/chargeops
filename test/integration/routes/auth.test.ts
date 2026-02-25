@@ -20,6 +20,7 @@ import type { Kysely } from "kysely";
 describe("Auth Endpoints", () => {
   let app: FastifyInstance;
   let db: Kysely<Database>;
+  let testTenantId: string;
 
   beforeAll(async () => {
     // Build app with all plugins
@@ -31,6 +32,14 @@ describe("Auth Endpoints", () => {
 
     // Clean up any test data from previous runs
     await _cleanupTestData();
+
+    // Create a test tenant that all registrations in this suite will use
+    const tenant = await db
+      .insertInto("tenants")
+      .values({ name: "Test Tenant" })
+      .returning("id")
+      .executeTakeFirstOrThrow();
+    testTenantId = tenant.id;
   });
 
   afterAll(async () => {
@@ -46,6 +55,7 @@ describe("Auth Endpoints", () => {
         payload: {
           email: "newuser@example.com",
           password: "MySecurePassword123",
+          tenantId: testTenantId,
           name: "New User",
         },
       });
@@ -71,6 +81,7 @@ describe("Auth Endpoints", () => {
         payload: {
           email: "cookietest@example.com",
           password: "MySecurePassword123",
+          tenantId: testTenantId,
         },
       });
 
@@ -93,7 +104,7 @@ describe("Auth Endpoints", () => {
       const res1 = await app.inject({
         method: "POST",
         url: "/auth/register",
-        payload: { email, password },
+        payload: { email, password, tenantId: testTenantId },
       });
       expect(res1.statusCode).toBe(201);
 
@@ -101,7 +112,7 @@ describe("Auth Endpoints", () => {
       const res2 = await app.inject({
         method: "POST",
         url: "/auth/register",
-        payload: { email, password },
+        payload: { email, password, tenantId: testTenantId },
       });
       expect(res2.statusCode).toBe(409);
 
@@ -118,6 +129,7 @@ describe("Auth Endpoints", () => {
         payload: {
           email: "weakpass@example.com",
           password: "short", // Too short
+          tenantId: testTenantId,
         },
       });
 
@@ -134,12 +146,40 @@ describe("Auth Endpoints", () => {
         payload: {
           email: "not-an-email",
           password: "MySecurePassword123",
+          tenantId: testTenantId,
         },
       });
 
       expect(res.statusCode).toBe(400);
       const body = res.json();
       expect(body.type).toBe("https://errors.chargeops.dev/bad-request");
+    });
+
+    it("rejects missing tenantId with 400 Bad Request", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: "/auth/register",
+        payload: {
+          email: "notenant@example.com",
+          password: "MySecurePassword123",
+        },
+      });
+
+      expect(res.statusCode).toBe(400);
+    });
+
+    it("rejects non-existent tenantId with 404 Not Found", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: "/auth/register",
+        payload: {
+          email: "badtenant@example.com",
+          password: "MySecurePassword123",
+          tenantId: "00000000-0000-0000-0000-000000000000",
+        },
+      });
+
+      expect(res.statusCode).toBe(404);
     });
 
     it("normalizes email to lowercase", async () => {
@@ -149,6 +189,7 @@ describe("Auth Endpoints", () => {
         payload: {
           email: "NormEmail@EXAMPLE.com",
           password: "MySecurePassword123",
+          tenantId: testTenantId,
         },
       });
 
@@ -177,7 +218,7 @@ describe("Auth Endpoints", () => {
       await app.inject({
         method: "POST",
         url: "/auth/register",
-        payload: { email, password },
+        payload: { email, password, tenantId: testTenantId },
       });
 
       // Login
@@ -204,7 +245,7 @@ describe("Auth Endpoints", () => {
       await app.inject({
         method: "POST",
         url: "/auth/register",
-        payload: { email, password },
+        payload: { email, password, tenantId: testTenantId },
       });
 
       const res = await app.inject({
@@ -242,6 +283,7 @@ describe("Auth Endpoints", () => {
         payload: {
           email,
           password: "CorrectPassword123",
+          tenantId: testTenantId,
         },
       });
 
@@ -294,7 +336,7 @@ describe("Auth Endpoints", () => {
       const regRes = await app.inject({
         method: "POST",
         url: "/auth/register",
-        payload: { email, password },
+        payload: { email, password, tenantId: testTenantId },
       });
 
       const { accessToken } = regRes.json();
@@ -314,8 +356,8 @@ describe("Auth Endpoints", () => {
         expect.objectContaining({
           userId: expect.any(String),
           email: expect.stringContaining("@"),
-          tenantId: expect.any(String),
-          role: expect.stringMatching(/^(admin|operator|viewer)$/),
+          tenantId: testTenantId,
+          role: expect.stringMatching(/^(tenant_admin|tenant_view|driver)$/),
         }),
       );
     });
@@ -351,7 +393,7 @@ describe("Auth Endpoints", () => {
       const regRes = await app.inject({
         method: "POST",
         url: "/auth/register",
-        payload: { email, password },
+        payload: { email, password, tenantId: testTenantId },
       });
 
       const refreshCookie = regRes.headers["set-cookie"];
@@ -383,7 +425,7 @@ describe("Auth Endpoints", () => {
       const regRes = await app.inject({
         method: "POST",
         url: "/auth/register",
-        payload: { email, password },
+        payload: { email, password, tenantId: testTenantId },
       });
 
       const oldRefreshCookie = regRes.headers["set-cookie"];
@@ -432,7 +474,7 @@ describe("Auth Endpoints", () => {
       const regRes = await app.inject({
         method: "POST",
         url: "/auth/register",
-        payload: { email, password },
+        payload: { email, password, tenantId: testTenantId },
       });
 
       const refreshCookie = regRes.headers["set-cookie"];
@@ -463,7 +505,7 @@ describe("Auth Endpoints", () => {
       const regRes = await app.inject({
         method: "POST",
         url: "/auth/register",
-        payload: { email, password },
+        payload: { email, password, tenantId: testTenantId },
       });
 
       const refreshCookie = regRes.headers["set-cookie"];
@@ -489,7 +531,7 @@ describe("Auth Endpoints", () => {
       const regRes = await app.inject({
         method: "POST",
         url: "/auth/register",
-        payload: { email, password },
+        payload: { email, password, tenantId: testTenantId },
       });
 
       const refreshCookie = regRes.headers["set-cookie"];
@@ -536,13 +578,9 @@ describe("Auth Endpoints", () => {
   });
 
   /**
-   * Helper: Clean up test data from auth tables.
-   * Note: Depends on database having cascading deletes or you manually
-   * deleting in dependency order.
+   * Helper: Clean up test data from auth tables and the test tenant.
    */
   async function _cleanupTestData(): Promise<void> {
-    // Delete test users and their related data
-    // Pattern: delete in reverse dependency order
     try {
       await db
         .deleteFrom("refresh_tokens")
@@ -554,6 +592,7 @@ describe("Auth Endpoints", () => {
         .execute();
 
       await db.deleteFrom("users").where("email", "like", "%@example.com").execute();
+      await db.deleteFrom("tenants").where("name", "=", "Test Tenant").execute();
     } catch (err) {
       // Ignore errors (tables might not exist in test setup)
       console.error("Cleanup error (ignored):", err);

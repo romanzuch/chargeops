@@ -68,6 +68,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     const result = await getAuthService().register({
       email: validated.email,
       password: validated.password,
+      tenantId: validated.tenantId,
       ...(validated.name && { name: validated.name }),
     });
 
@@ -270,6 +271,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     const user = await getAuthService().getCurrentUser({
       userId: req.jwtUser!.sub,
       tenantId: req.jwtUser!.tid,
+      isSuperAdmin: req.jwtUser!.isSuperAdmin,
     });
 
     return CurrentUserResponseSchema.parse(user);
