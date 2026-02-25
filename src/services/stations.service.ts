@@ -4,6 +4,8 @@ import { NotFoundError } from "../http/errors.js";
 import {
   createStation,
   updateStation,
+  findPublicStations,
+  findPublicStationById,
   type CreateStationInput,
   type UpdateStationInput,
 } from "../repositories/stations.repo.js";
@@ -24,6 +26,18 @@ export class StationsService {
     input: UpdateStationInput,
   ): Promise<Selectable<StationsTable>> {
     const station = await updateStation(this.db, stationId, tenantId, input);
+    if (!station) {
+      throw new NotFoundError("Station not found");
+    }
+    return station;
+  }
+
+  async getPublicStations(): Promise<Selectable<StationsTable>[]> {
+    return findPublicStations(this.db);
+  }
+
+  async getPublicStation(stationId: string): Promise<Selectable<StationsTable>> {
+    const station = await findPublicStationById(this.db, stationId);
     if (!station) {
       throw new NotFoundError("Station not found");
     }

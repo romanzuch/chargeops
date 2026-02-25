@@ -20,6 +20,7 @@ function toStationResponse(station: Selectable<StationsTable>) {
     latitude: station.latitude,
     longitude: station.longitude,
     status: station.status,
+    visibility: station.visibility,
     createdAt: station.created_at.toISOString(),
     updatedAt: station.updated_at.toISOString(),
     deletedAt: station.deleted_at?.toISOString() ?? null,
@@ -27,10 +28,15 @@ function toStationResponse(station: Selectable<StationsTable>) {
 }
 
 /**
- * Station endpoints: create and update.
+ * Station endpoints.
  *
- * All routes require a valid JWT and tenant context.
- * Tenant scoping is enforced at the SQL level — queries always filter by tenant_id.
+ * Public read endpoints (no auth required):
+ * - GET /stations         — all public stations
+ * - GET /stations/:id     — single public station
+ *
+ * Operator endpoints (JWT + tenant context required):
+ * - POST /stations        — create a station
+ * - PATCH /stations/:id   — update a station
  */
 export const stationRoutes: FastifyPluginAsync = async (app) => {
   let stationsService: StationsService | undefined;
@@ -42,11 +48,41 @@ export const stationRoutes: FastifyPluginAsync = async (app) => {
   };
 
   /**
+   * GET /stations
+   *
+   * Returns all public stations across all tenants. No authentication required.
+   * Private stations are never included.
+   *
+   * Response (200): StationResponse[]
+   */
+  app.get("/stations", async (_req, reply) => {
+    const stations = await getService().getPublicStations();
+    return reply.send(stations.map(toStationResponse));
+  });
+
+  /**
+   * GET /stations/:id
+   *
+   * Returns a single public station by ID. No authentication required.
+   * Returns 404 for private stations or non-existent IDs.
+   *
+   * Response (200): StationResponse
+   *
+   * Errors:
+   * - 404: station not found or not public
+   */
+  app.get("/stations/:id", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const station = await getService().getPublicStation(id);
+    return reply.send(toStationResponse(station));
+  });
+
+  /**
    * POST /stations
    *
    * Create a new station scoped to the authenticated tenant.
    *
-   * Request: { name, external_id?, latitude?, longitude?, status? }
+   * Request: { name, external_id?, latitude?, longitude?, status?, visibility? }
    * Response (201): StationResponse
    *
    * Errors:
@@ -73,6 +109,7 @@ export const stationRoutes: FastifyPluginAsync = async (app) => {
         ...(body.latitude !== undefined && { latitude: body.latitude }),
         ...(body.longitude !== undefined && { longitude: body.longitude }),
         ...(body.status !== undefined && { status: body.status }),
+        ...(body.visibility !== undefined && { visibility: body.visibility }),
       });
 
       return reply.status(201).send(toStationResponse(station));
@@ -85,7 +122,7 @@ export const stationRoutes: FastifyPluginAsync = async (app) => {
    * Update an existing station within the authenticated tenant.
    * Only fields present in the body are updated.
    *
-   * Request: { name?, external_id?, latitude?, longitude?, status? }
+   * Request: { name?, external_id?, latitude?, longitude?, status?, visibility? }
    * Response (200): StationResponse
    *
    * Errors:
@@ -115,6 +152,7 @@ export const stationRoutes: FastifyPluginAsync = async (app) => {
         ...(body.latitude !== undefined && { latitude: body.latitude }),
         ...(body.longitude !== undefined && { longitude: body.longitude }),
         ...(body.status !== undefined && { status: body.status }),
+        ...(body.visibility !== undefined && { visibility: body.visibility }),
       });
 
       return reply.send(toStationResponse(station));

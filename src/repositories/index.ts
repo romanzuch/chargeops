@@ -13,6 +13,8 @@ export {
   createStation,
   updateStation,
   findStationById,
+  findPublicStations,
+  findPublicStationById,
   type CreateStationInput,
   type UpdateStationInput,
 } from "./stations.repo.js";

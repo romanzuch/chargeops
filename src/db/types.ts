@@ -11,6 +11,7 @@ import type { Generated } from "kysely";
 
 export type Role = "admin" | "operator" | "viewer";
 export type StationStatus = "active" | "planning" | "inactive" | "error";
+export type StationVisibility = "public" | "private";
 
 /**
  * Notes on timestamps:
@@ -61,6 +62,7 @@ export interface StationsTable {
   latitude: number | null;
   longitude: number | null;
   status: Generated<StationStatus>; // default 'active'
+  visibility: Generated<StationVisibility>; // default 'public'
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;

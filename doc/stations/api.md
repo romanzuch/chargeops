@@ -2,16 +2,76 @@
 
 ## Overview
 
-The stations API allows authenticated users to manage charging stations within their
-tenant. All endpoints require a valid JWT access token and enforce tenant isolation —
-a user can only create or modify stations that belong to their own tenant.
+The stations API has two access tiers:
 
-Tenant context is resolved from the JWT `tid` claim via the `verifyTenant` preHandler;
-it is never accepted from the request body.
+- **Public read** — `GET /stations` and `GET /stations/:id` require no authentication.
+  They return only stations with `visibility = 'public'`, making station discovery
+  available to EV drivers browsing a map before signing in.
+- **Operator write** — `POST /stations` and `PATCH /stations/:id` require a valid JWT
+  and enforce tenant isolation. Operators can only create or modify stations within
+  their own tenant. They also control `visibility` to choose whether a station
+  appears in public discovery.
 
 ---
 
 ## Endpoints
+
+### GET /stations
+
+Returns all public stations across all tenants. No authentication required.
+
+**Response (200 OK):**
+
+```json
+[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "tenantId": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+    "name": "Main Street Hub",
+    "externalId": "EXT-001",
+    "latitude": 48.8566,
+    "longitude": 2.3522,
+    "status": "active",
+    "visibility": "public",
+    "createdAt": "2026-02-25T12:00:00.000Z",
+    "updatedAt": "2026-02-25T12:00:00.000Z",
+    "deletedAt": null
+  }
+]
+```
+
+Returns an empty array if no public stations exist.
+
+**Example cURL:**
+
+```bash
+curl http://localhost:3000/stations
+```
+
+---
+
+### GET /stations/:id
+
+Returns a single public station by ID. No authentication required.
+Returns 404 for private stations or non-existent IDs — both cases are
+intentionally indistinguishable to prevent ID enumeration.
+
+**Response (200 OK):** Same shape as a single element from `GET /stations`.
+
+**Error Scenarios:**
+
+| Status | Error Type  | Reason                                   |
+| ------ | ----------- | ---------------------------------------- |
+| 404    | not-found   | Station does not exist or is private     |
+| 500    | internal    | Server error (see logs)                  |
+
+**Example cURL:**
+
+```bash
+curl http://localhost:3000/stations/550e8400-e29b-41d4-a716-446655440000
+```
+
+---
 
 ### POST /stations
 
@@ -38,6 +98,7 @@ Create a new station scoped to the authenticated tenant.
 | `latitude`    | `number` | No       | `-90` to `90`; must be provided together with `longitude`             |
 | `longitude`   | `number` | No       | `-180` to `180`; must be provided together with `latitude`            |
 | `status`      | `string` | No       | One of `active`, `planning`, `inactive`, `error`; defaults to `active`|
+| `visibility`  | `string` | No       | `public` or `private`; defaults to `public`                           |
 
 **Response (201 Created):**
 
@@ -50,6 +111,7 @@ Create a new station scoped to the authenticated tenant.
   "latitude": 48.8566,
   "longitude": 2.3522,
   "status": "planning",
+  "visibility": "public",
   "createdAt": "2026-02-25T12:00:00.000Z",
   "updatedAt": "2026-02-25T12:00:00.000Z",
   "deletedAt": null
@@ -75,7 +137,8 @@ curl -X POST http://localhost:3000/stations \
     "external_id": "EXT-001",
     "latitude": 48.8566,
     "longitude": 2.3522,
-    "status": "planning"
+    "status": "planning",
+    "visibility": "private"
   }'
 ```
 
@@ -107,6 +170,7 @@ one field must be present.
 | `latitude`    | `number \| null`  | Must be provided together with `longitude`; pass `null` to clear      |
 | `longitude`   | `number \| null`  | Must be provided together with `latitude`; pass `null` to clear       |
 | `status`      | `string`          | One of `active`, `planning`, `inactive`, `error`                      |
+| `visibility`  | `string`          | `public` or `private`                                                 |
 
 **Response (200 OK):**
 
@@ -119,6 +183,7 @@ one field must be present.
   "latitude": 48.8566,
   "longitude": 2.3522,
   "status": "active",
+  "visibility": "public",
   "createdAt": "2026-02-25T12:00:00.000Z",
   "updatedAt": "2026-02-25T12:30:00.000Z",
   "deletedAt": null
