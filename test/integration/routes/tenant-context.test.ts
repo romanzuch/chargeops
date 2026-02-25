@@ -22,8 +22,8 @@ import { signAccessToken } from "../../../src/services/jwt.service.js";
 const JWT_SECRET = process.env["JWT_SECRET"] ?? "";
 const TTL = 900;
 const TEST_USER_ID = "test-user-oms19";
-const TEST_TENANT_ID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
-const OTHER_TENANT_ID = "00000000-0000-0000-0000-000000000000";
+const TEST_TENANT_ID = "f47ac10b-58cc-4372-a567-0e02b2c3d479";
+const OTHER_TENANT_ID = "a0000000-0000-4000-8000-000000000000";
 
 if (!JWT_SECRET) {
   throw new Error("JWT_SECRET must be set (add it to .env.test)");
@@ -51,7 +51,7 @@ describe("Tenant Context Middleware (verifyTenant preHandler)", () => {
     await app.ready();
 
     token = await signAccessToken(
-      { userId: TEST_USER_ID, tenantId: TEST_TENANT_ID },
+      { userId: TEST_USER_ID, tenantId: TEST_TENANT_ID, isSuperAdmin: false },
       JWT_SECRET,
       TTL,
     );

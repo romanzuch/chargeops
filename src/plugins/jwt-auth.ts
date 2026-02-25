@@ -2,20 +2,22 @@ import fp from "fastify-plugin";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { config } from "../config/config.js";
 import { verifyAccessToken } from "../services/jwt.service.js";
-import { InternalServerError, UnauthorizedError } from "../http/errors.js";
+import { ForbiddenError, InternalServerError, UnauthorizedError } from "../http/errors.js";
 
 /**
- * Registers the `verifyJwt` preHandler decorator and the `jwtUser` request
- * decorator.
+ * Registers the `verifyJwt` and `verifySuperAdmin` preHandler decorators, and
+ * the `jwtUser` request decorator.
  *
  * Wrapped with fastify-plugin so decorators escape encapsulation and are
  * available on every route in the application.
  *
  * Usage:
  * ```ts
- * app.get('/protected', { preHandler: [app.verifyJwt] }, async (req) => {
- *   return { userId: req.jwtUser!.sub };
- * });
+ * // Any authenticated user:
+ * app.get('/protected', { preHandler: [app.verifyJwt] }, handler)
+ *
+ * // Super admin only:
+ * app.post('/admin/tenants', { preHandler: [app.verifySuperAdmin] }, handler)
  * ```
  */
 export const jwtAuthPlugin = fp(
@@ -42,7 +44,18 @@ export const jwtAuthPlugin = fp(
       request.jwtUser = await verifyAccessToken(token, secret);
     };
 
+    const verifySuperAdmin = async (
+      request: FastifyRequest,
+      reply: FastifyReply,
+    ): Promise<void> => {
+      await verifyJwt(request, reply);
+      if (!request.jwtUser?.isSuperAdmin) {
+        throw new ForbiddenError("Super admin access required");
+      }
+    };
+
     app.decorate("verifyJwt", verifyJwt);
+    app.decorate("verifySuperAdmin", verifySuperAdmin);
   },
   { name: "jwt-auth" },
 );

@@ -8,12 +8,15 @@ import {
   CurrentUserResponseSchema,
 } from "../../../../src/http/schemas/auth.schemas.js";
 
+const VALID_TENANT_ID = "f47ac10b-58cc-4372-a567-0e02b2c3d479";
+
 describe("Auth Schemas", () => {
   describe("RegisterRequestSchema", () => {
     it("validates a complete registration request", () => {
       const input = {
         email: "user@example.com",
         password: "MySecurePassword123",
+        tenantId: VALID_TENANT_ID,
         name: "John Doe",
       };
 
@@ -22,6 +25,7 @@ describe("Auth Schemas", () => {
       if (result.success) {
         expect(result.data.email).toBe("user@example.com");
         expect(result.data.password).toBe("MySecurePassword123");
+        expect(result.data.tenantId).toBe(VALID_TENANT_ID);
         expect(result.data.name).toBe("John Doe");
       }
     });
@@ -30,6 +34,7 @@ describe("Auth Schemas", () => {
       const input = {
         email: "User@EXAMPLE.com",
         password: "MySecurePassword123",
+        tenantId: VALID_TENANT_ID,
       };
 
       const result = RegisterRequestSchema.safeParse(input);
@@ -43,6 +48,7 @@ describe("Auth Schemas", () => {
       const input = {
         email: "  user@example.com  ",
         password: "MySecurePassword123",
+        tenantId: VALID_TENANT_ID,
       };
 
       const result = RegisterRequestSchema.safeParse(input);
@@ -56,6 +62,7 @@ describe("Auth Schemas", () => {
       const input = {
         email: "not-an-email",
         password: "MySecurePassword123",
+        tenantId: VALID_TENANT_ID,
       };
 
       const result = RegisterRequestSchema.safeParse(input);
@@ -66,6 +73,7 @@ describe("Auth Schemas", () => {
       const input = {
         email: "user@example.com",
         password: "short",
+        tenantId: VALID_TENANT_ID,
       };
 
       const result = RegisterRequestSchema.safeParse(input);
@@ -76,6 +84,7 @@ describe("Auth Schemas", () => {
       const input = {
         email: "user@example.com",
         password: "123456789012", // exactly 12 chars
+        tenantId: VALID_TENANT_ID,
       };
 
       const result = RegisterRequestSchema.safeParse(input);
@@ -86,6 +95,7 @@ describe("Auth Schemas", () => {
       const input = {
         email: "user@example.com",
         password: "MySecurePassword123",
+        tenantId: VALID_TENANT_ID,
       };
 
       const result = RegisterRequestSchema.safeParse(input);
@@ -95,10 +105,32 @@ describe("Auth Schemas", () => {
       }
     });
 
+    it("requires tenantId", () => {
+      const input = {
+        email: "user@example.com",
+        password: "MySecurePassword123",
+      };
+
+      const result = RegisterRequestSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects non-UUID tenantId", () => {
+      const input = {
+        email: "user@example.com",
+        password: "MySecurePassword123",
+        tenantId: "not-a-uuid",
+      };
+
+      const result = RegisterRequestSchema.safeParse(input);
+      expect(result.success).toBe(false);
+    });
+
     it("rejects extra fields (strict validation)", () => {
       const input = {
         email: "user@example.com",
         password: "MySecurePassword123",
+        tenantId: VALID_TENANT_ID,
         extra: "field",
       } as any;
 
@@ -251,12 +283,24 @@ describe("Auth Schemas", () => {
   });
 
   describe("CurrentUserResponseSchema", () => {
-    it("validates a valid user profile response", () => {
+    it("validates a valid user profile response (tenant user)", () => {
       const input = {
         userId: "user-123",
         email: "user@example.com",
         tenantId: "tenant-456",
-        role: "admin",
+        role: "tenant_admin",
+      };
+
+      const result = CurrentUserResponseSchema.safeParse(input);
+      expect(result.success).toBe(true);
+    });
+
+    it("validates super admin response (tenantId null)", () => {
+      const input = {
+        userId: "user-123",
+        email: "admin@example.com",
+        tenantId: null,
+        role: "super_admin",
       };
 
       const result = CurrentUserResponseSchema.safeParse(input);
@@ -264,13 +308,13 @@ describe("Auth Schemas", () => {
     });
 
     it("validates all valid role values", () => {
-      const roles = ["admin", "operator", "viewer"] as const;
+      const roles = ["super_admin", "tenant_admin", "tenant_view", "driver"] as const;
 
       for (const role of roles) {
         const input = {
           userId: "user-123",
           email: "user@example.com",
-          tenantId: "tenant-456",
+          tenantId: role === "super_admin" ? null : "tenant-456",
           role,
         };
 
@@ -296,7 +340,7 @@ describe("Auth Schemas", () => {
         userId: "user-123",
         email: "not-an-email",
         tenantId: "tenant-456",
-        role: "admin",
+        role: "tenant_admin",
       };
 
       const result = CurrentUserResponseSchema.safeParse(input);

@@ -14,9 +14,9 @@ import {
   revokeByFamily,
 } from "../repositories/refresh-tokens.repo.js";
 import {
-  createTenant,
   createUserTenantRole,
   findFirstTenantForUser,
+  findTenantById,
   findUserRoleInTenant,
 } from "../repositories/tenants.repo.js";
 
@@ -32,12 +32,12 @@ export interface Config {
  * The accessToken is returned in the response body.
  * The refreshToken (raw bytes as base64url) should be stored in the response
  * as an HttpOnly cookie, and optionally in the body if REFRESH_TOKEN_IN_BODY=true.
- * The refreshTokenFamily is useful for logout (revoke entire family).
+ * tenantId is null for super admins (cross-tenant).
  */
 export interface AuthResult {
   userId: string;
   email: string;
-  tenantId: string;
+  tenantId: string | null;
   accessToken: string;
   expiresIn: number;
   refreshToken: string; // base64url-encoded
@@ -47,6 +47,7 @@ export interface AuthResult {
 export interface RegisterInput {
   email: string;
   password: string;
+  tenantId: string;
   name?: string;
 }
 
@@ -61,7 +62,8 @@ export interface RefreshInput {
 
 export interface CurrentUserInput {
   userId: string;
-  tenantId: string;
+  tenantId: string | null;
+  isSuperAdmin: boolean;
 }
 
 /**
@@ -75,15 +77,17 @@ export class AuthService {
   ) {}
 
   /**
-   * Registers a new user with email and password.
+   * Registers a new user with email, password, and a chosen tenant.
    *
    * - Validates password strength
    * - Hashes password with argon2id
-   * - Creates user, a default tenant, and an admin role assignment in one transaction
+   * - Validates that the target tenant exists
+   * - Creates user and assigns tenant_view role in one transaction
    * - Generates access and refresh tokens
    *
    * @throws BadRequestError if password is too weak or invalid
    * @throws ConflictError if email is already registered
+   * @throws NotFoundError if tenantId does not match an existing tenant
    */
   async register(input: RegisterInput): Promise<AuthResult> {
     // Validate password strength early (before any DB work)
@@ -92,31 +96,30 @@ export class AuthService {
       throw new BadRequestError(passwordCheck.reason);
     }
 
+    // Validate the tenant exists before creating the user
+    await findTenantById(this.db, input.tenantId);
+
     // Normalize email for consistent storage
     const email = normalizeEmail(input.email);
 
     // Hash password with argon2id (OWASP-compliant)
     const passwordHash = await hashPassword(input.password);
 
-    // Create user, default tenant, and role assignment atomically.
-    // ConflictError from createUser propagates out of the transaction, rolling it back.
-    const { user, tenantId } = await this.db.transaction().execute(async (trx) => {
+    // Create user and assign tenant_view role atomically.
+    // ConflictError from createUser propagates out of the transaction.
+    const { user } = await this.db.transaction().execute(async (trx) => {
       const user = await createUser(trx, { email, passwordHash });
-
-      // Use the email domain as the default tenant name (e.g. "example.com")
-      const tenantName = email.split("@")[1] ?? email;
-      const tenant = await createTenant(trx, { name: tenantName });
 
       await createUserTenantRole(trx, {
         userId: user.id,
-        tenantId: tenant.id,
-        role: "admin",
+        tenantId: input.tenantId,
+        role: "tenant_view",
       });
 
-      return { user, tenantId: tenant.id };
+      return { user };
     });
 
-    return this._generateAuthResult(user.id, email, tenantId);
+    return this._generateAuthResult(user.id, email, input.tenantId, false);
   }
 
   /**
@@ -124,7 +127,8 @@ export class AuthService {
    *
    * - Looks up user by email
    * - Verifies password against stored hash (timing-safe)
-   * - Resolves the user's default tenant from user_tenant_roles
+   * - Super admins log in without a tenant context (tenantId = null)
+   * - Regular users resolve their default tenant from user_tenant_roles
    * - Generates access and refresh tokens
    *
    * Never reveals whether email or password was wrong (generic error).
@@ -146,13 +150,18 @@ export class AuthService {
       throw new UnauthorizedError("Invalid credentials");
     }
 
+    // Super admins are cross-tenant — no tenant context in token
+    if (user.is_super_admin) {
+      return this._generateAuthResult(user.id, email, null, true);
+    }
+
     // Resolve default tenant (first by creation time)
     const tenantInfo = await findFirstTenantForUser(this.db, user.id);
     if (!tenantInfo) {
       throw new UnauthorizedError("No tenant assigned to this account");
     }
 
-    return this._generateAuthResult(user.id, email, tenantInfo.tenantId);
+    return this._generateAuthResult(user.id, email, tenantInfo.tenantId, false);
   }
 
   /**
@@ -188,7 +197,7 @@ export class AuthService {
       expiresAt,
     });
 
-    // Fetch user for email
+    // Fetch user for email and super admin flag
     const user = await findUserById(this.db, token.user_id);
     if (!user) {
       throw new UnauthorizedError("User not found");
@@ -199,6 +208,7 @@ export class AuthService {
       {
         userId: token.user_id,
         tenantId: token.tenant_id,
+        isSuperAdmin: user.is_super_admin,
       },
       this.config.jwtSecret,
       this.config.jwtAccessTtlSeconds,
@@ -237,6 +247,8 @@ export class AuthService {
   /**
    * Fetches current user details (for GET /me endpoint).
    *
+   * Super admins return a synthetic profile with tenantId: null and role: 'super_admin'.
+   *
    * @throws UnauthorizedError if user not found or not a member of the given tenant
    */
   async getCurrentUser(input: CurrentUserInput) {
@@ -245,7 +257,17 @@ export class AuthService {
       throw new UnauthorizedError("User not found");
     }
 
-    const role = await findUserRoleInTenant(this.db, input.userId, input.tenantId);
+    if (input.isSuperAdmin) {
+      return {
+        userId: user.id,
+        email: user.email,
+        tenantId: null,
+        role: "super_admin" as const,
+      };
+    }
+
+    const tenantId = input.tenantId!;
+    const role = await findUserRoleInTenant(this.db, input.userId, tenantId);
     if (!role) {
       throw new UnauthorizedError("User does not belong to this tenant");
     }
@@ -253,7 +275,7 @@ export class AuthService {
     return {
       userId: user.id,
       email: user.email,
-      tenantId: input.tenantId,
+      tenantId,
       role,
     };
   }
@@ -264,7 +286,8 @@ export class AuthService {
   private async _generateAuthResult(
     userId: string,
     email: string,
-    tenantId: string,
+    tenantId: string | null,
+    isSuperAdmin: boolean,
   ): Promise<AuthResult> {
     // Generate refresh token (raw bytes, to be hashed for storage)
     const refreshTokenRaw = randomTokenBytes();
@@ -283,7 +306,7 @@ export class AuthService {
 
     // Generate access token
     const accessToken = await signAccessToken(
-      { userId, tenantId },
+      { userId, tenantId, isSuperAdmin },
       this.config.jwtSecret,
       this.config.jwtAccessTtlSeconds,
     );

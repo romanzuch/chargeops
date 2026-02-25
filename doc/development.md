@@ -14,7 +14,15 @@ make db-up
 npm run db:migrate
 ```
 
-3. Start server in watch mode
+3. Seed a super admin (first-time setup only)
+
+```bash
+SUPER_ADMIN_EMAIL=admin@example.com \
+SUPER_ADMIN_PASSWORD=YourStrongPass123! \
+  npx tsx scripts/seed-super-admin.ts
+```
+
+4. Start server in watch mode
 
 ```
 npm run dev
@@ -33,15 +41,15 @@ Never commit real secrets.
 
 ## Database Migrations
 
-Migration files are stored as raw SQL.
+Migration files are stored as raw SQL in `migrations/`.
 
 Naming convention:
 
 ```
-YYYYMMDD_description.sql
+NNN_description.sql
 ```
 
-They are executed in alphabetical order.
+e.g. `005_roles_and_super_admin.sql`. They are applied in numeric order.
 
 Best practice:
 

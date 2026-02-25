@@ -38,7 +38,8 @@ The ChargeOps authentication system provides secure user registration, login, an
 Each token embeds:
 
 - `sub`: User ID (UUID)
-- `tid`: Tenant ID (UUID) — multi-tenant scoping
+- `tid`: Tenant ID (UUID) — multi-tenant scoping. `null` for super admins.
+- `isSuperAdmin`: `true` for super admins; `false` for all tenant-scoped users.
 - `jti`: Unique token ID — enables future per-token revocation
 - `iat`: Issued-at timestamp
 - `exp`: Expiration time
@@ -47,7 +48,10 @@ Each token embeds:
 
 ### POST /auth/register
 
-Register a new user.
+Register a new user and join an existing tenant.
+
+Before calling this endpoint, fetch the tenant list from `GET /tenants` to
+obtain a valid `tenantId`.
 
 **Request:**
 
@@ -55,6 +59,7 @@ Register a new user.
 {
   "email": "user@example.com",
   "password": "MySecurePassword123",
+  "tenantId": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
   "name": "Full Name (optional)"
 }
 ```
@@ -62,8 +67,12 @@ Register a new user.
 **Validation:**
 
 - `email`: Must be valid email format (lowercase normalized)
-- `password`: Minimum 12 characters (future: entropy scoring)
+- `password`: Minimum 12 characters
+- `tenantId`: Must be a valid UUID of an existing tenant
 - `name`: Max 255 characters (optional, reserved for display names)
+
+The user is assigned the `tenant_view` role by default. A `tenant_admin` can
+promote them later.
 
 **Response (201 Created):**
 
@@ -84,7 +93,8 @@ Set-Cookie: REFRESH_TOKEN=<base64url>; Path=/; HttpOnly; Secure; SameSite=Strict
 
 | Status | Error Type  | Reason                                          |
 | ------ | ----------- | ----------------------------------------------- |
-| 400    | bad-request | Invalid email, weak password, validation failed |
+| 400    | bad-request | Invalid email, weak password, missing/invalid tenantId |
+| 404    | not-found   | `tenantId` does not match any existing tenant   |
 | 409    | conflict    | Email already registered                        |
 | 500    | internal    | Server error (see logs)                         |
 
@@ -96,6 +106,7 @@ curl -X POST http://localhost:3000/auth/register \
   -d '{
     "email": "user@example.com",
     "password": "MySecurePassword123",
+    "tenantId": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
     "name": "John Doe"
   }'
 ```
@@ -293,14 +304,25 @@ GET /me
 Authorization: Bearer <accessToken>
 ```
 
-**Response (200 OK):**
+**Response (200 OK) — tenant user:**
 
 ```json
 {
   "userId": "550e8400-e29b-41d4-a716-446655440000",
   "email": "user@example.com",
   "tenantId": "6ba7b810-9dad-11d1-80b4-00c04fd430c8",
-  "role": "admin"
+  "role": "tenant_view"
+}
+```
+
+**Response (200 OK) — super admin:**
+
+```json
+{
+  "userId": "9a8b7c6d-5e4f-3210-fedc-ba9876543210",
+  "email": "admin@example.com",
+  "tenantId": null,
+  "role": "super_admin"
 }
 ```
 
@@ -308,8 +330,8 @@ Authorization: Bearer <accessToken>
 
 - `userId`: User's UUID
 - `email`: User's registered email (lowercase)
-- `tenantId`: Current tenant scope (from JWT `tid` claim)
-- `role`: User's role in tenant (`admin`, `operator`, `viewer`)
+- `tenantId`: Current tenant scope (from JWT `tid` claim). `null` for super admins.
+- `role`: User's role — one of `super_admin`, `tenant_admin`, `tenant_view`, `driver`
 
 **Error Scenarios:**
 
@@ -323,6 +345,104 @@ Authorization: Bearer <accessToken>
 ```bash
 curl -X GET http://localhost:3000/me \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+---
+
+---
+
+### GET /tenants
+
+List all tenants. **Public — no authentication required.**
+
+Used by registration forms to let users pick which tenant to join.
+
+**Response (200 OK):**
+
+```json
+[
+  { "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479", "name": "Acme Corp" },
+  { "id": "a0000000-0000-4000-8000-000000000000", "name": "Another Org" }
+]
+```
+
+**Example cURL:**
+
+```bash
+curl http://localhost:3000/tenants
+```
+
+---
+
+### GET /admin/tenants
+
+List all tenants with creation timestamps. **Super admin only.**
+
+**Request:**
+
+```
+GET /admin/tenants
+Authorization: Bearer <superAdminAccessToken>
+```
+
+**Response (200 OK):**
+
+```json
+[
+  {
+    "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "name": "Acme Corp",
+    "createdAt": "2026-02-25T12:00:00.000Z"
+  }
+]
+```
+
+**Error Scenarios:**
+
+| Status | Error Type  | Reason                              |
+| ------ | ----------- | ----------------------------------- |
+| 401    | unauthorized | No / invalid Bearer token          |
+| 403    | forbidden   | Authenticated but not a super admin |
+
+---
+
+### POST /admin/tenants
+
+Create a new tenant. **Super admin only.**
+
+**Request:**
+
+```json
+{
+  "name": "Acme Corp"
+}
+```
+
+**Response (201 Created):**
+
+```json
+{
+  "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "name": "Acme Corp",
+  "createdAt": "2026-02-25T12:00:00.000Z"
+}
+```
+
+**Error Scenarios:**
+
+| Status | Error Type  | Reason                              |
+| ------ | ----------- | ----------------------------------- |
+| 400    | bad-request | Missing or empty `name`             |
+| 401    | unauthorized | No / invalid Bearer token          |
+| 403    | forbidden   | Authenticated but not a super admin |
+
+**Example cURL:**
+
+```bash
+curl -X POST http://localhost:3000/admin/tenants \
+  -H "Authorization: Bearer <superAdminToken>" \
+  -H "Content-Type: application/json" \
+  -d '{ "name": "Acme Corp" }'
 ```
 
 ---
@@ -499,13 +619,14 @@ Defaults are suitable for both development and production; only `JWT_SECRET` is 
 ## Future Enhancements
 
 1. **Rate Limiting** — Implement hook points (POST /auth/register, /auth/login)
-2. **Multi-Tenant Login** — Allow user to select tenant during login
+2. **Multi-Tenant Login** — Allow user to select tenant at login when they belong to multiple tenants
 3. **OAuth/OIDC** — Third-party provider integration
 4. **Audit Logging** — Track login/logout events per tenant
 5. **Session Management** — View/revoke specific sessions (device tracking)
 6. **Password Reset** — Email-based recovery flow
 7. **2FA/MFA** — TOTP or WebAuthn support
 8. **OpenAPI** — Swagger/Redoc documentation (generated from schemas)
+9. **Role Promotion** — Endpoint for `tenant_admin` to promote users within their tenant
 
 ---
 

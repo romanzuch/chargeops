@@ -93,18 +93,39 @@ format:
 
 ---
 
+## Super Admin Context
+
+Super admins (`is_super_admin = true` in the `users` table) are cross-tenant.
+Their JWT contains `tid: null` and `isSuperAdmin: true`. When a super admin
+request passes through `verifyTenant`, the check is **skipped entirely** and
+`request.tenantId` is set to `null`.
+
+Super admin routes use `app.verifySuperAdmin` instead of `[app.verifyJwt, app.verifyTenant]`:
+
+```typescript
+app.post("/admin/tenants", { preHandler: [app.verifySuperAdmin] }, async (req) => {
+  // req.jwtUser!.isSuperAdmin === true, req.tenantId === null
+});
+```
+
+Super admins are created via the seed script — not through the registration
+endpoint. See [`doc/rbac.md`](./rbac.md) for details.
+
+---
+
 ## Public Routes (Bypass)
 
 The following routes do **not** include `verifyTenant` and require no tenant
 context:
 
-| Route             | Reason                        |
-| ----------------- | ----------------------------- |
-| `GET /health`     | Liveness probe — no auth      |
-| `POST /auth/register` | Creates a user account    |
-| `POST /auth/login`    | Issues tokens             |
-| `POST /auth/refresh`  | Rotates tokens            |
-| `POST /auth/logout`   | Revokes tokens            |
+| Route                 | Reason                                          |
+| --------------------- | ----------------------------------------------- |
+| `GET /health`         | Liveness probe — no auth                        |
+| `GET /tenants`        | Public tenant listing for registration form     |
+| `POST /auth/register` | Creates a user account (tenant chosen in body)  |
+| `POST /auth/login`    | Issues tokens                                   |
+| `POST /auth/refresh`  | Rotates tokens                                  |
+| `POST /auth/logout`   | Revokes tokens                                  |
 
 ---
 
@@ -130,13 +151,11 @@ which is expected.
 The current implementation is **single-tenant per token** — the `tid` in the
 JWT determines the tenant for the lifetime of the token. Future work may allow:
 
-- A super-admin token with no fixed `tid` that selects tenant via the
-  `x-tenant-id` header (bypassing the mismatch check)
 - A token exchange endpoint that issues a new token scoped to a different tenant
-  after verifying cross-tenant membership
+  after verifying cross-tenant membership (for users who belong to multiple tenants)
 
-These changes will require a dedicated ticket and changes to the JWT signing
-logic and the `verifyTenant` implementation.
+Super admin cross-tenant access is already implemented via `isSuperAdmin: true`
+and `tid: null` in the JWT.
 
 ---
 

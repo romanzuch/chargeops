@@ -9,7 +9,7 @@
 
 import type { Generated } from "kysely";
 
-export type Role = "admin" | "operator" | "viewer";
+export type Role = "tenant_admin" | "tenant_view" | "driver";
 export type StationStatus = "active" | "planning" | "inactive" | "error";
 export type StationVisibility = "public" | "private";
 
@@ -33,6 +33,7 @@ export interface UsersTable {
   id: Generated<string>; // uuid, gen_random_uuid()
   email: string;
   password_hash: string;
+  is_super_admin: Generated<boolean>;
   created_at: Generated<Timestamp>;
 }
 
@@ -46,7 +47,7 @@ export interface UserTenantRolesTable {
 export interface RefreshTokensTable {
   id: Generated<string>; // uuid, gen_random_uuid()
   user_id: string; // uuid
-  tenant_id: string; // uuid
+  tenant_id: string | null; // uuid; null for super admin sessions
   family_id: Generated<string>; // uuid, gen_random_uuid() — callers may override
   token_hash: string;
   expires_at: Timestamp;

@@ -10,24 +10,40 @@ scope. Verification is handled centrally by the `verifyJwt` Fastify preHandler.
 
 ## Claims
 
-| Claim | Type     | Description                                    |
-| ----- | -------- | ---------------------------------------------- |
-| `sub` | `string` | Subject — authenticated user ID (UUID)         |
-| `tid` | `string` | Tenant ID — tenant scope for this token (UUID) |
-| `jti` | `string` | JWT ID — UUID, unique per token                |
-| `iat` | `number` | Issued-at (seconds since epoch, set by issuer) |
-| `exp` | `number` | Expiry (seconds since epoch)                   |
+| Claim          | Type              | Description                                                    |
+| -------------- | ----------------- | -------------------------------------------------------------- |
+| `sub`          | `string`          | Subject — authenticated user ID (UUID)                         |
+| `tid`          | `string \| null`  | Tenant ID — tenant scope for this token. `null` for super admins (cross-tenant). |
+| `isSuperAdmin` | `boolean`         | `true` for super admins; `false` for all tenant-scoped users.  |
+| `jti`          | `string`          | JWT ID — UUID, unique per token                                |
+| `iat`          | `number`          | Issued-at (seconds since epoch, set by issuer)                 |
+| `exp`          | `number`          | Expiry (seconds since epoch)                                   |
 
 All claims are **required**. `verifyAccessToken` throws `UnauthorizedError`
 for any token that is missing or contains the wrong type for any of them.
+`tid` may be `null` (valid for super admins) but must not be an empty string.
 
-### Example decoded payload
+### Example decoded payload — tenant user
 
 ```json
 {
   "sub": "3f4e5d6c-7b8a-9012-3c4d-5e6f7a8b9c0d",
   "tid": "a1b2c3d4-e5f6-7890-ab12-cd34ef567890",
+  "isSuperAdmin": false,
   "jti": "550e8400-e29b-41d4-a716-446655440000",
+  "iat": 1700000000,
+  "exp": 1700000900
+}
+```
+
+### Example decoded payload — super admin
+
+```json
+{
+  "sub": "9a8b7c6d-5e4f-3210-fedc-ba9876543210",
+  "tid": null,
+  "isSuperAdmin": true,
+  "jti": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
   "iat": 1700000000,
   "exp": 1700000900
 }
@@ -71,8 +87,16 @@ Located in `src/services/jwt.service.ts`.
 ```typescript
 import { signAccessToken } from "./services/jwt.service.js";
 
+// Tenant user
 const token = await signAccessToken(
-  { userId: "...", tenantId: "..." },
+  { userId: "...", tenantId: "...", isSuperAdmin: false },
+  config.jwtSecret!,
+  config.jwtAccessTtlSeconds,
+);
+
+// Super admin (no tenant)
+const token = await signAccessToken(
+  { userId: "...", tenantId: null, isSuperAdmin: true },
   config.jwtSecret!,
   config.jwtAccessTtlSeconds,
 );
@@ -107,17 +131,26 @@ const payload = await verifyAccessToken(token, config.jwtSecret!);
 `src/plugins/jwt-auth.ts` registers two decorators (via `fastify-plugin` to
 escape encapsulation):
 
-| Decorator         | Type                         | Description                          |
-| ----------------- | ---------------------------- | ------------------------------------ |
-| `request.jwtUser` | `AccessTokenPayload \| null` | Populated after `verifyJwt` runs     |
-| `app.verifyJwt`   | `preHandler`                 | Extracts + verifies the Bearer token |
+| Decorator              | Type                         | Description                                              |
+| ---------------------- | ---------------------------- | -------------------------------------------------------- |
+| `request.jwtUser`      | `AccessTokenPayload \| null` | Populated after `verifyJwt` (or `verifySuperAdmin`) runs |
+| `app.verifyJwt`        | `preHandler`                 | Extracts + verifies the Bearer token (any user)          |
+| `app.verifySuperAdmin` | `preHandler`                 | Verifies Bearer token AND asserts `isSuperAdmin === true` |
 
-### Using `verifyJwt` on a route
+### Using `verifyJwt` on a route (any authenticated user)
 
 ```typescript
 app.get("/api/resource", { preHandler: [app.verifyJwt] }, async (req) => {
-  const { sub: userId, tid: tenantId } = req.jwtUser!;
+  const { sub: userId, tid: tenantId, isSuperAdmin } = req.jwtUser!;
   // ...
+});
+```
+
+### Using `verifySuperAdmin` on a route (super admins only)
+
+```typescript
+app.post("/admin/tenants", { preHandler: [app.verifySuperAdmin] }, async (req) => {
+  // Only reachable by super admins — ForbiddenError thrown otherwise
 });
 ```
 

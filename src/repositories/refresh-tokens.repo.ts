@@ -4,7 +4,7 @@ import { UnauthorizedError } from "../http/errors.js";
 
 export interface CreateRefreshTokenInput {
   userId: string;
-  tenantId: string;
+  tenantId: string | null;
   familyId: string;
   tokenHash: string;
   expiresAt: Date;
