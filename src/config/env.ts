@@ -34,6 +34,12 @@ const EnvSchema = z.object({
     .enum(["true", "false"])
     .transform((v) => v === "true")
     .default(false),
+  /**
+   * Comma-separated list of allowed CORS origins.
+   * Example: "http://localhost:5173,https://app.chargeops.com"
+   * If not set, CORS is disabled (only same-origin requests allowed).
+   */
+  CORS_ORIGIN: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

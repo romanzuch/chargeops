@@ -23,8 +23,9 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
    * Response (200): Array of { id, name, createdAt }
    */
   app.get("/admin/tenants", { preHandler: [app.verifySuperAdmin] }, async () => {
-    const tenants = await findAllTenants(getDb());
-    return tenants.map((t) => ({ id: t.id, name: t.name, createdAt: t.created_at }));
+    // Use a large limit for the admin view; pagination not required here
+    const result = await findAllTenants(getDb(), { limit: 1000, offset: 0 });
+    return result.rows.map((t) => ({ id: t.id, name: t.name, createdAt: t.created_at }));
   });
 
   /**

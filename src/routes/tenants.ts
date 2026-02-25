@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { getDb } from "../db/kysely.js";
 import { findAllTenants } from "../repositories/tenants.repo.js";
+import { PaginationQuerySchema, paginatedResponse } from "../http/schemas/pagination.schemas.js";
 
 /**
  * Public tenant routes — no authentication required.
@@ -11,12 +12,14 @@ export const tenantRoutes: FastifyPluginAsync = async (app) => {
   /**
    * GET /tenants
    *
-   * List all tenants (id + name only).
+   * List all tenants (id + name only), paginated.
    *
-   * Response (200): Array of { id, name }
+   * Query params: limit (default 20), offset (default 0)
+   * Response (200): { data: Array<{ id, name }>, total: number }
    */
-  app.get("/tenants", async () => {
-    const tenants = await findAllTenants(getDb());
-    return tenants.map((t) => ({ id: t.id, name: t.name }));
+  app.get("/tenants", async (req) => {
+    const pagination = PaginationQuerySchema.parse(req.query);
+    const result = await findAllTenants(getDb(), pagination);
+    return paginatedResponse(result.rows.map((t) => ({ id: t.id, name: t.name })), result.total);
   });
 };

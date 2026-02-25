@@ -120,3 +120,32 @@ export const CurrentUserResponseSchema = z.object({
 });
 
 export type CurrentUserResponse = z.infer<typeof CurrentUserResponseSchema>;
+
+/**
+ * PATCH /me/password request.
+ *
+ * - currentPassword: plain-text current password (for verification)
+ * - newPassword: new plain-text password (min 12 chars)
+ */
+export const ChangePasswordRequestSchema = z.object({
+  currentPassword: z.string().min(1, "Current password is required"),
+  newPassword: passwordSchema,
+});
+
+export type ChangePasswordRequest = z.infer<typeof ChangePasswordRequestSchema>;
+
+/**
+ * PATCH /me request.
+ *
+ * At least one field is required.
+ * - email: new email address
+ */
+export const UpdateProfileRequestSchema = z
+  .object({
+    email: emailSchema.optional(),
+  })
+  .refine((data) => Object.keys(data).some((k) => data[k as keyof typeof data] !== undefined), {
+    message: "At least one field must be provided",
+  });
+
+export type UpdateProfileRequest = z.infer<typeof UpdateProfileRequestSchema>;

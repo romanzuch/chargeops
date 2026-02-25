@@ -32,13 +32,21 @@ function makeStation(overrides: Partial<Selectable<StationsTable>> = {}): Select
  * (returns another proxy) and the terminal execute methods resolve with
  * `executeResult`. Args passed to each builder method are recorded in
  * `captured` by method name (last call wins for repeated methods like .where()).
+ *
+ * @param executeResult - returned by `.execute()` and `.executeTakeFirst()`
+ * @param executeTakeFirstOrThrowResult - if provided, returned by `.executeTakeFirstOrThrow()`
+ *   instead of `executeResult`. Useful for testing queries that use Promise.all
+ *   with both .execute() and .executeTakeFirstOrThrow() (e.g. paginated queries).
  */
-function makeCapturingDb(executeResult: unknown) {
+function makeCapturingDb(executeResult: unknown, executeTakeFirstOrThrowResult?: unknown) {
   const captured = new Map<string, unknown[]>();
 
   const handler: ProxyHandler<object> = {
     get(_, prop: string) {
-      if (["execute", "executeTakeFirst", "executeTakeFirstOrThrow"].includes(prop)) {
+      if (prop === "executeTakeFirstOrThrow") {
+        return vi.fn().mockResolvedValue(executeTakeFirstOrThrowResult ?? executeResult);
+      }
+      if (["execute", "executeTakeFirst"].includes(prop)) {
         return vi.fn().mockResolvedValue(executeResult);
       }
       return vi.fn((...args: unknown[]) => {
@@ -163,21 +171,25 @@ describe("findStationById", () => {
 // ─── findPublicStations ───────────────────────────────────────────────────────
 
 describe("findPublicStations", () => {
+  const pagination = { limit: 20, offset: 0 };
+
   it("returns the array of stations from the DB", async () => {
     const stations = [makeStation({ id: "s1" }), makeStation({ id: "s2" })];
-    const { db } = makeCapturingDb(stations);
+    const { db } = makeCapturingDb(stations, { total: "2" });
 
-    const result = await findPublicStations(db);
+    const result = await findPublicStations(db, pagination);
 
-    expect(result).toBe(stations);
+    expect(result.rows).toEqual(stations);
+    expect(result.total).toBe(2);
   });
 
   it("returns an empty array when the DB returns none", async () => {
-    const { db } = makeCapturingDb([]);
+    const { db } = makeCapturingDb([], { total: "0" });
 
-    const result = await findPublicStations(db);
+    const result = await findPublicStations(db, pagination);
 
-    expect(result).toEqual([]);
+    expect(result.rows).toEqual([]);
+    expect(result.total).toBe(0);
   });
 });
 

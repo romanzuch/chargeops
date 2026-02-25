@@ -7,6 +7,7 @@ import {
   UpdateStationBodySchema,
   StationResponseSchema,
 } from "../http/schemas/stations.schemas.js";
+import { PaginationQuerySchema, paginatedResponse } from "../http/schemas/pagination.schemas.js";
 import { StationsService } from "../services/stations.service.js";
 import type { Selectable } from "kysely";
 import type { StationsTable } from "../db/types.js";
@@ -33,11 +34,11 @@ const ALL_TENANT_ROLES = ["tenant_admin", "tenant_view", "driver"] as const;
  * Station endpoints.
  *
  * Public read endpoints (no auth required):
- * - GET /stations         — all public stations across all tenants
+ * - GET /stations         — all public stations across all tenants (paginated)
  * - GET /stations/:id     — single public station
  *
  * Tenant read endpoints (JWT + tenant context + any role):
- * - GET /tenant/stations       — all stations in the user's tenant (incl. private)
+ * - GET /tenant/stations       — all stations in the user's tenant (paginated, incl. private)
  * - GET /tenant/stations/:id   — single station in the user's tenant (incl. private)
  *
  * Tenant write endpoints (JWT + tenant context + tenant_admin role only):
@@ -60,13 +61,14 @@ export const stationRoutes: FastifyPluginAsync = async (app) => {
   /**
    * GET /stations
    *
-   * Returns all public stations across all tenants.
+   * Returns public stations (paginated). Query params: limit (default 20), offset (default 0).
    *
-   * Response (200): StationResponse[]
+   * Response (200): { data: StationResponse[], total: number }
    */
-  app.get("/stations", async (_req, reply) => {
-    const stations = await getService().getPublicStations();
-    return reply.send(stations.map(toStationResponse));
+  app.get("/stations", async (req, reply) => {
+    const pagination = PaginationQuerySchema.parse(req.query);
+    const result = await getService().getPublicStations(pagination);
+    return reply.send(paginatedResponse(result.rows.map(toStationResponse), result.total));
   });
 
   /**
@@ -94,10 +96,11 @@ export const stationRoutes: FastifyPluginAsync = async (app) => {
   /**
    * GET /tenant/stations
    *
-   * Returns all stations in the authenticated user's tenant, including private
+   * Returns stations in the authenticated user's tenant (paginated), including private
    * ones. Accessible to all tenant roles (tenant_admin, tenant_view, driver).
    *
-   * Response (200): StationResponse[]
+   * Query params: limit (default 20), offset (default 0)
+   * Response (200): { data: StationResponse[], total: number }
    *
    * Errors:
    * - 401: missing or invalid token
@@ -107,8 +110,9 @@ export const stationRoutes: FastifyPluginAsync = async (app) => {
     "/tenant/stations",
     { preHandler: [app.verifyJwt, app.verifyTenant, app.verifyRole([...ALL_TENANT_ROLES])] },
     async (req, reply) => {
-      const stations = await getService().getTenantStations(req.tenantId!);
-      return reply.send(stations.map(toStationResponse));
+      const pagination = PaginationQuerySchema.parse(req.query);
+      const result = await getService().getTenantStations(req.tenantId!, pagination);
+      return reply.send(paginatedResponse(result.rows.map(toStationResponse), result.total));
     },
   );
 

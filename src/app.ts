@@ -1,4 +1,8 @@
 import fastifyCookie from "@fastify/cookie";
+import fastifyCors from "@fastify/cors";
+import fastifyRateLimit from "@fastify/rate-limit";
+import fastifySwagger from "@fastify/swagger";
+import fastifySwaggerUi from "@fastify/swagger-ui";
 import Fastify, { type FastifyInstance } from "fastify";
 import { config } from "./config/config.js";
 import { errorHandlerPlugin } from "./plugins/error-handler.js";
@@ -31,6 +35,45 @@ export function buildApp(): FastifyInstance {
       },
     },
     genReqId: (req) => genRequestId(req.headers as Record<string, unknown>),
+  });
+
+  // CORS — must be registered before routes
+  if (config.corsOrigins.length > 0) {
+    app.register(fastifyCors, {
+      origin: config.corsOrigins,
+      credentials: true, // needed for HttpOnly cookie-based refresh tokens
+      exposedHeaders: ["x-request-id"],
+    });
+  }
+
+  // Rate limiting — registered globally; per-route limits override via config.rateLimit
+  app.register(fastifyRateLimit, {
+    global: false, // opt-in per route, not global blanket limit
+    keyGenerator: (req) => req.ip,
+  });
+
+  // OpenAPI docs
+  app.register(fastifySwagger, {
+    openapi: {
+      info: {
+        title: "ChargeOps API",
+        description: "Multi-tenant EV charging station management API",
+        version: "1.0.0",
+      },
+      components: {
+        securitySchemes: {
+          bearerAuth: {
+            type: "http",
+            scheme: "bearer",
+            bearerFormat: "JWT",
+          },
+        },
+      },
+    },
+  });
+  app.register(fastifySwaggerUi, {
+    routePrefix: "/docs",
+    uiConfig: { docExpansion: "list", deepLinking: true },
   });
 
   // Cross-cutting concerns

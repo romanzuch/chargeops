@@ -6,7 +6,12 @@ import {
   UpdateUserRoleBodySchema,
   TenantUserResponseSchema,
 } from "../http/schemas/tenant-users.schemas.js";
-import { findUsersInTenant, updateUserTenantRole } from "../repositories/tenants.repo.js";
+import { PaginationQuerySchema, paginatedResponse } from "../http/schemas/pagination.schemas.js";
+import {
+  findUsersInTenant,
+  findUserInTenant,
+  updateUserTenantRole,
+} from "../repositories/tenants.repo.js";
 import type { TenantUserRow } from "../repositories/tenants.repo.js";
 
 function toTenantUserResponse(row: TenantUserRow) {
@@ -23,7 +28,7 @@ function toTenantUserResponse(row: TenantUserRow) {
  *
  * All routes require the `tenant_admin` role within the authenticated tenant.
  *
- * - GET  /tenant/users              — list users in the tenant with their roles
+ * - GET  /tenant/users              — list users in the tenant (paginated)
  * - PATCH /tenant/users/:userId/role — update a user's role (tenant_admin or tenant_view)
  *
  * Role transition rules:
@@ -39,10 +44,10 @@ export const tenantUserRoutes: FastifyPluginAsync = async (app) => {
   /**
    * GET /tenant/users
    *
-   * Returns all members of the authenticated tenant with their roles,
-   * ordered by join date ascending.
+   * Returns members of the authenticated tenant (paginated), ordered by join date.
    *
-   * Response (200): TenantUserResponse[]
+   * Query params: limit (default 20), offset (default 0)
+   * Response (200): { data: TenantUserResponse[], total: number }
    *
    * Errors:
    * - 401: missing or invalid token
@@ -53,8 +58,9 @@ export const tenantUserRoutes: FastifyPluginAsync = async (app) => {
       throw new ForbiddenError("This endpoint requires a tenant context");
     }
 
-    const users = await findUsersInTenant(getDb(), req.tenantId);
-    return reply.send(users.map(toTenantUserResponse));
+    const pagination = PaginationQuerySchema.parse(req.query);
+    const result = await findUsersInTenant(getDb(), req.tenantId, pagination);
+    return reply.send(paginatedResponse(result.rows.map(toTenantUserResponse), result.total));
   });
 
   /**
@@ -100,9 +106,7 @@ export const tenantUserRoutes: FastifyPluginAsync = async (app) => {
       throw new NotFoundError(`User not found in this tenant: ${userId}`);
     }
 
-    // Re-fetch to get the user's email alongside the updated role
-    const members = await findUsersInTenant(getDb(), req.tenantId);
-    const member = members.find((m) => m.userId === userId);
+    const member = await findUserInTenant(getDb(), userId, req.tenantId);
     if (!member) {
       throw new NotFoundError(`User not found in this tenant: ${userId}`);
     }
