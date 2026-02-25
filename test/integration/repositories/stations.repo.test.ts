@@ -8,6 +8,8 @@ import {
   findStationById,
   findPublicStations,
   findPublicStationById,
+  findStationsByTenant,
+  findStationByIdForTenant,
 } from "../../../src/repositories/stations.repo.js";
 import type { Kysely } from "kysely";
 import type { Database } from "../../../src/db/types.js";
@@ -199,6 +201,74 @@ describe("findPublicStations", () => {
     expect(ids).toContain(pub2.id);
     expect(ids).not.toContain(priv.id);
     expect(ids).not.toContain(deleted.id);
+  });
+});
+
+describe("findStationsByTenant", () => {
+  it("returns all non-deleted stations for the tenant regardless of visibility", async () => {
+    const tenantId = await seedTenant("find-tenant-list");
+    const pub = await createStation(db, { tenantId, name: "Public", visibility: "public" });
+    const priv = await createStation(db, { tenantId, name: "Private", visibility: "private" });
+    const deleted = await createStation(db, { tenantId, name: "Deleted", visibility: "public" });
+    await softDelete(deleted.id);
+
+    const results = await findStationsByTenant(db, tenantId);
+    const ids = results.map((s) => s.id);
+
+    expect(ids).toContain(pub.id);
+    expect(ids).toContain(priv.id);
+    expect(ids).not.toContain(deleted.id);
+  });
+
+  it("excludes stations belonging to other tenants", async () => {
+    const tenantId = await seedTenant("find-tenant-isolation-owner");
+    const otherTenantId = await seedTenant("find-tenant-isolation-other");
+    const mine = await createStation(db, { tenantId, name: "Mine" });
+    const theirs = await createStation(db, { tenantId: otherTenantId, name: "Theirs" });
+
+    const results = await findStationsByTenant(db, tenantId);
+    const ids = results.map((s) => s.id);
+
+    expect(ids).toContain(mine.id);
+    expect(ids).not.toContain(theirs.id);
+  });
+});
+
+describe("findStationByIdForTenant", () => {
+  it("returns a public station for the correct tenant", async () => {
+    const tenantId = await seedTenant("find-tenant-by-id-public");
+    const station = await createStation(db, { tenantId, name: "Public", visibility: "public" });
+
+    const found = await findStationByIdForTenant(db, station.id, tenantId);
+    expect(found).toBeDefined();
+    expect(found!.id).toBe(station.id);
+  });
+
+  it("returns a private station for the correct tenant", async () => {
+    const tenantId = await seedTenant("find-tenant-by-id-private");
+    const station = await createStation(db, { tenantId, name: "Private", visibility: "private" });
+
+    const found = await findStationByIdForTenant(db, station.id, tenantId);
+    expect(found).toBeDefined();
+    expect(found!.id).toBe(station.id);
+  });
+
+  it("returns undefined for a station belonging to another tenant", async () => {
+    const tenantId = await seedTenant("find-tenant-by-id-wrong-owner");
+    const otherTenantId = await seedTenant("find-tenant-by-id-wrong-other");
+    const station = await createStation(db, { tenantId, name: "Not Yours" });
+
+    const found = await findStationByIdForTenant(db, station.id, otherTenantId);
+    expect(found).toBeUndefined();
+  });
+
+  it("returns undefined for a soft-deleted station", async () => {
+    const tenantId = await seedTenant("find-tenant-by-id-deleted");
+    const station = await createStation(db, { tenantId, name: "Deleted" });
+    await softDelete(station.id);
+
+    const found = await findStationByIdForTenant(db, station.id, tenantId);
+    expect(found).toBeUndefined();
   });
 });
 

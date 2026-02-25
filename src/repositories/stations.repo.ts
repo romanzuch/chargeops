@@ -78,6 +78,32 @@ export async function findStationById(
     .executeTakeFirst();
 }
 
+export async function findStationsByTenant(
+  db: Kysely<Database>,
+  tenantId: string,
+): Promise<Selectable<StationsTable>[]> {
+  return db
+    .selectFrom("stations")
+    .selectAll()
+    .where("tenant_id", "=", tenantId)
+    .where("deleted_at", "is", null)
+    .execute();
+}
+
+export async function findStationByIdForTenant(
+  db: Kysely<Database>,
+  stationId: string,
+  tenantId: string,
+): Promise<Selectable<StationsTable> | undefined> {
+  return db
+    .selectFrom("stations")
+    .selectAll()
+    .where("id", "=", stationId)
+    .where("tenant_id", "=", tenantId)
+    .where("deleted_at", "is", null)
+    .executeTakeFirst();
+}
+
 export async function findPublicStations(
   db: Kysely<Database>,
 ): Promise<Selectable<StationsTable>[]> {
