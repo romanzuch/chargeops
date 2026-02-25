@@ -1,5 +1,5 @@
 import type { Kysely, Selectable } from "kysely";
-import type { Database, UsersTable } from "../db/types.js";
+import type { Database, Role, UsersTable } from "../db/types.js";
 import { ConflictError } from "../http/errors.js";
 
 export interface CreateUserInput {
@@ -40,6 +40,20 @@ export async function findUserById(
   id: string,
 ): Promise<Selectable<UsersTable> | undefined> {
   return db.selectFrom("users").selectAll().where("id", "=", id).executeTakeFirst();
+}
+
+export async function findUserRoleInTenant(
+  db: Kysely<Database>,
+  userId: string,
+  tenantId: string,
+): Promise<Role | undefined> {
+  const row = await db
+    .selectFrom("user_tenant_roles")
+    .select("role")
+    .where("user_id", "=", userId)
+    .where("tenant_id", "=", tenantId)
+    .executeTakeFirst();
+  return row?.role;
 }
 
 function isUniqueViolation(err: unknown): boolean {

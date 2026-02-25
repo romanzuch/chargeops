@@ -6,6 +6,8 @@ import {
   updateStation,
   findPublicStations,
   findPublicStationById,
+  findStationsByTenant,
+  findStationByIdForTenant,
   type CreateStationInput,
   type UpdateStationInput,
 } from "../repositories/stations.repo.js";
@@ -38,6 +40,21 @@ export class StationsService {
 
   async getPublicStation(stationId: string): Promise<Selectable<StationsTable>> {
     const station = await findPublicStationById(this.db, stationId);
+    if (!station) {
+      throw new NotFoundError("Station not found");
+    }
+    return station;
+  }
+
+  async getTenantStations(tenantId: string): Promise<Selectable<StationsTable>[]> {
+    return findStationsByTenant(this.db, tenantId);
+  }
+
+  async getTenantStation(
+    stationId: string,
+    tenantId: string,
+  ): Promise<Selectable<StationsTable>> {
+    const station = await findStationByIdForTenant(this.db, stationId, tenantId);
     if (!station) {
       throw new NotFoundError("Station not found");
     }

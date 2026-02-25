@@ -27,14 +27,20 @@ function toStationResponse(station: Selectable<StationsTable>) {
   });
 }
 
+const ALL_TENANT_ROLES = ["tenant_admin", "tenant_view", "driver"] as const;
+
 /**
  * Station endpoints.
  *
  * Public read endpoints (no auth required):
- * - GET /stations         — all public stations
+ * - GET /stations         — all public stations across all tenants
  * - GET /stations/:id     — single public station
  *
- * Operator endpoints (JWT + tenant context required):
+ * Tenant read endpoints (JWT + tenant context + any role):
+ * - GET /tenant/stations       — all stations in the user's tenant (incl. private)
+ * - GET /tenant/stations/:id   — single station in the user's tenant (incl. private)
+ *
+ * Tenant write endpoints (JWT + tenant context + tenant_admin role only):
  * - POST /stations        — create a station
  * - PATCH /stations/:id   — update a station
  */
@@ -47,11 +53,14 @@ export const stationRoutes: FastifyPluginAsync = async (app) => {
     return stationsService;
   };
 
+  // ---------------------------------------------------------------------------
+  // Public read endpoints — no authentication required
+  // ---------------------------------------------------------------------------
+
   /**
    * GET /stations
    *
-   * Returns all public stations across all tenants. No authentication required.
-   * Private stations are never included.
+   * Returns all public stations across all tenants.
    *
    * Response (200): StationResponse[]
    */
@@ -63,7 +72,7 @@ export const stationRoutes: FastifyPluginAsync = async (app) => {
   /**
    * GET /stations/:id
    *
-   * Returns a single public station by ID. No authentication required.
+   * Returns a single public station by ID.
    * Returns 404 for private stations or non-existent IDs.
    *
    * Response (200): StationResponse
@@ -77,10 +86,64 @@ export const stationRoutes: FastifyPluginAsync = async (app) => {
     return reply.send(toStationResponse(station));
   });
 
+  // ---------------------------------------------------------------------------
+  // Tenant read endpoints — any authenticated tenant role (tenant_admin,
+  // tenant_view, driver). Intended for the driver mobile app and backoffice.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * GET /tenant/stations
+   *
+   * Returns all stations in the authenticated user's tenant, including private
+   * ones. Accessible to all tenant roles (tenant_admin, tenant_view, driver).
+   *
+   * Response (200): StationResponse[]
+   *
+   * Errors:
+   * - 401: missing or invalid token
+   * - 403: insufficient role
+   */
+  app.get(
+    "/tenant/stations",
+    { preHandler: [app.verifyJwt, app.verifyTenant, app.verifyRole([...ALL_TENANT_ROLES])] },
+    async (req, reply) => {
+      const stations = await getService().getTenantStations(req.tenantId!);
+      return reply.send(stations.map(toStationResponse));
+    },
+  );
+
+  /**
+   * GET /tenant/stations/:id
+   *
+   * Returns a single station by ID within the authenticated user's tenant,
+   * including private ones.
+   *
+   * Response (200): StationResponse
+   *
+   * Errors:
+   * - 401: missing or invalid token
+   * - 403: insufficient role
+   * - 404: station not found or belongs to a different tenant
+   */
+  app.get(
+    "/tenant/stations/:id",
+    { preHandler: [app.verifyJwt, app.verifyTenant, app.verifyRole([...ALL_TENANT_ROLES])] },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const station = await getService().getTenantStation(id, req.tenantId!);
+      return reply.send(toStationResponse(station));
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // Tenant write endpoints — tenant_admin only
+  // ---------------------------------------------------------------------------
+
   /**
    * POST /stations
    *
    * Create a new station scoped to the authenticated tenant.
+   * Requires the `tenant_admin` role.
    *
    * Request: { name, external_id?, latitude?, longitude?, status?, visibility? }
    * Response (201): StationResponse
@@ -88,10 +151,11 @@ export const stationRoutes: FastifyPluginAsync = async (app) => {
    * Errors:
    * - 400: validation failure
    * - 401: missing or invalid token
+   * - 403: requires tenant_admin role
    */
   app.post(
     "/stations",
-    { preHandler: [app.verifyJwt, app.verifyTenant] },
+    { preHandler: [app.verifyJwt, app.verifyTenant, app.verifyRole(["tenant_admin"])] },
     async (req, reply) => {
       let body;
       try {
@@ -121,6 +185,7 @@ export const stationRoutes: FastifyPluginAsync = async (app) => {
    *
    * Update an existing station within the authenticated tenant.
    * Only fields present in the body are updated.
+   * Requires the `tenant_admin` role.
    *
    * Request: { name?, external_id?, latitude?, longitude?, status?, visibility? }
    * Response (200): StationResponse
@@ -128,11 +193,12 @@ export const stationRoutes: FastifyPluginAsync = async (app) => {
    * Errors:
    * - 400: validation failure
    * - 401: missing or invalid token
+   * - 403: requires tenant_admin role
    * - 404: station not found or belongs to a different tenant
    */
   app.patch(
     "/stations/:id",
-    { preHandler: [app.verifyJwt, app.verifyTenant] },
+    { preHandler: [app.verifyJwt, app.verifyTenant, app.verifyRole(["tenant_admin"])] },
     async (req, reply) => {
       const { id } = req.params as { id: string };
 
