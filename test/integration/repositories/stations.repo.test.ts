@@ -194,8 +194,8 @@ describe("findPublicStations", () => {
     const deleted = await createStation(db, { tenantId, name: "Deleted", visibility: "public" });
     await softDelete(deleted.id);
 
-    const results = await findPublicStations(db);
-    const ids = results.map((s) => s.id);
+    const results = await findPublicStations(db, { limit: 50, offset: 0 });
+    const ids = results.rows.map((s) => s.id);
 
     expect(ids).toContain(pub1.id);
     expect(ids).toContain(pub2.id);
@@ -212,8 +212,8 @@ describe("findStationsByTenant", () => {
     const deleted = await createStation(db, { tenantId, name: "Deleted", visibility: "public" });
     await softDelete(deleted.id);
 
-    const results = await findStationsByTenant(db, tenantId);
-    const ids = results.map((s) => s.id);
+    const results = await findStationsByTenant(db, tenantId, { limit: 50, offset: 0 });
+    const ids = results.rows.map((s) => s.id);
 
     expect(ids).toContain(pub.id);
     expect(ids).toContain(priv.id);
@@ -226,8 +226,8 @@ describe("findStationsByTenant", () => {
     const mine = await createStation(db, { tenantId, name: "Mine" });
     const theirs = await createStation(db, { tenantId: otherTenantId, name: "Theirs" });
 
-    const results = await findStationsByTenant(db, tenantId);
-    const ids = results.map((s) => s.id);
+    const results = await findStationsByTenant(db, tenantId, { limit: 50, offset: 0 });
+    const ids = results.rows.map((s) => s.id);
 
     expect(ids).toContain(mine.id);
     expect(ids).not.toContain(theirs.id);
