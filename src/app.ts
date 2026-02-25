@@ -7,6 +7,7 @@ import { tenantContextPlugin } from "./plugins/tenant-context.js";
 import { genRequestId, requestContextPlugin } from "./plugins/request-context.js";
 import { authRoutes } from "./routes/auth.js";
 import { healthRoutes } from "./routes/health.js";
+import { stationRoutes } from "./routes/stations.js";
 
 /**
  * Builds the Fastify application.
@@ -39,6 +40,7 @@ export function buildApp(): FastifyInstance {
   // Routes
   app.register(authRoutes);
   app.register(healthRoutes);
+  app.register(stationRoutes);
 
   return app;
 }
