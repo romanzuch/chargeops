@@ -78,16 +78,34 @@ export async function findStationById(
     .executeTakeFirst();
 }
 
+export interface PaginationInput {
+  limit: number;
+  offset: number;
+}
+
+export interface PaginatedStations {
+  rows: Selectable<StationsTable>[];
+  total: number;
+}
+
 export async function findStationsByTenant(
   db: Kysely<Database>,
   tenantId: string,
-): Promise<Selectable<StationsTable>[]> {
-  return db
+  pagination: PaginationInput,
+): Promise<PaginatedStations> {
+  const baseQuery = db
     .selectFrom("stations")
-    .selectAll()
     .where("tenant_id", "=", tenantId)
-    .where("deleted_at", "is", null)
-    .execute();
+    .where("deleted_at", "is", null);
+
+  const [rows, countRow] = await Promise.all([
+    baseQuery.selectAll().limit(pagination.limit).offset(pagination.offset).execute(),
+    baseQuery
+      .select((eb) => eb.fn.countAll<string>().as("total"))
+      .executeTakeFirstOrThrow(),
+  ]);
+
+  return { rows, total: Number(countRow.total) };
 }
 
 export async function findStationByIdForTenant(
@@ -106,13 +124,21 @@ export async function findStationByIdForTenant(
 
 export async function findPublicStations(
   db: Kysely<Database>,
-): Promise<Selectable<StationsTable>[]> {
-  return db
+  pagination: PaginationInput,
+): Promise<PaginatedStations> {
+  const baseQuery = db
     .selectFrom("stations")
-    .selectAll()
     .where("visibility", "=", "public")
-    .where("deleted_at", "is", null)
-    .execute();
+    .where("deleted_at", "is", null);
+
+  const [rows, countRow] = await Promise.all([
+    baseQuery.selectAll().limit(pagination.limit).offset(pagination.offset).execute(),
+    baseQuery
+      .select((eb) => eb.fn.countAll<string>().as("total"))
+      .executeTakeFirstOrThrow(),
+  ]);
+
+  return { rows, total: Number(countRow.total) };
 }
 
 export async function findPublicStationById(

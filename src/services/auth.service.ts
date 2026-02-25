@@ -6,7 +6,13 @@ import { hashPassword, validatePasswordStrength, verifyPassword } from "../secur
 import { normalizeEmail } from "../security/email.js";
 import { randomTokenBytes, sha256Hex } from "../security/tokens.js";
 import { signAccessToken } from "./jwt.service.js";
-import { createUser, findUserByEmail, findUserById } from "../repositories/users.repo.js";
+import {
+  createUser,
+  findUserByEmail,
+  findUserById,
+  updateUserPassword,
+  updateUserEmail,
+} from "../repositories/users.repo.js";
 import {
   createRefreshToken,
   findValidRefreshTokenByHash,
@@ -64,6 +70,17 @@ export interface CurrentUserInput {
   userId: string;
   tenantId: string | null;
   isSuperAdmin: boolean;
+}
+
+export interface ChangePasswordInput {
+  userId: string;
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface UpdateProfileInput {
+  userId: string;
+  email?: string;
 }
 
 /**
@@ -278,6 +295,53 @@ export class AuthService {
       tenantId,
       role,
     };
+  }
+
+  /**
+   * Changes a user's password after verifying their current password.
+   *
+   * @throws UnauthorizedError if user not found or current password is wrong
+   * @throws BadRequestError if new password is too weak
+   */
+  async changePassword(input: ChangePasswordInput): Promise<void> {
+    const user = await findUserById(this.db, input.userId);
+    if (!user) {
+      throw new UnauthorizedError("User not found");
+    }
+
+    const currentValid = await verifyPassword(input.currentPassword, user.password_hash);
+    if (!currentValid) {
+      throw new UnauthorizedError("Current password is incorrect");
+    }
+
+    const strengthCheck = validatePasswordStrength(input.newPassword);
+    if (!strengthCheck.ok) {
+      throw new BadRequestError(strengthCheck.reason);
+    }
+
+    const newHash = await hashPassword(input.newPassword);
+    await updateUserPassword(this.db, input.userId, newHash);
+  }
+
+  /**
+   * Updates a user's profile (currently: email).
+   *
+   * @throws UnauthorizedError if user not found
+   * @throws ConflictError if new email is already in use
+   */
+  async updateProfile(input: UpdateProfileInput): Promise<{ userId: string; email: string }> {
+    const user = await findUserById(this.db, input.userId);
+    if (!user) {
+      throw new UnauthorizedError("User not found");
+    }
+
+    if (input.email !== undefined) {
+      const normalized = normalizeEmail(input.email);
+      const updated = await updateUserEmail(this.db, input.userId, normalized);
+      return { userId: updated.id, email: updated.email };
+    }
+
+    return { userId: user.id, email: user.email };
   }
 
   /**

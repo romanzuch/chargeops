@@ -56,6 +56,38 @@ export async function findUserRoleInTenant(
   return row?.role;
 }
 
+export async function updateUserPassword(
+  db: Kysely<Database>,
+  userId: string,
+  passwordHash: string,
+): Promise<void> {
+  await db
+    .updateTable("users")
+    .set({ password_hash: passwordHash })
+    .where("id", "=", userId)
+    .execute();
+}
+
+export async function updateUserEmail(
+  db: Kysely<Database>,
+  userId: string,
+  email: string,
+): Promise<Selectable<UsersTable>> {
+  try {
+    return await db
+      .updateTable("users")
+      .set({ email })
+      .where("id", "=", userId)
+      .returningAll()
+      .executeTakeFirstOrThrow();
+  } catch (err: unknown) {
+    if (isUniqueViolation(err)) {
+      throw new ConflictError("Email already in use");
+    }
+    throw err;
+  }
+}
+
 function isUniqueViolation(err: unknown): boolean {
   return (
     typeof err === "object" &&

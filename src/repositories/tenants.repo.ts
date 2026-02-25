@@ -42,10 +42,25 @@ export async function findTenantById(
   return row;
 }
 
+export interface PaginationInput {
+  limit: number;
+  offset: number;
+}
+
 export async function findAllTenants(
   db: Kysely<Database>,
-): Promise<Selectable<TenantsTable>[]> {
-  return db.selectFrom("tenants").selectAll().orderBy("created_at", "asc").execute();
+  pagination: PaginationInput,
+): Promise<{ rows: Selectable<TenantsTable>[]; total: number }> {
+  const baseQuery = db.selectFrom("tenants");
+
+  const [rows, countRow] = await Promise.all([
+    baseQuery.selectAll().orderBy("created_at", "asc").limit(pagination.limit).offset(pagination.offset).execute(),
+    baseQuery
+      .select((eb) => eb.fn.countAll<string>().as("total"))
+      .executeTakeFirstOrThrow(),
+  ]);
+
+  return { rows, total: Number(countRow.total) };
 }
 
 /**
@@ -76,13 +91,56 @@ export interface TenantUserRow {
 }
 
 /**
- * Returns all users in a tenant with their roles, ordered by join date.
+ * Returns paginated users in a tenant with their roles, ordered by join date.
  */
 export async function findUsersInTenant(
   db: Kysely<Database>,
   tenantId: string,
-): Promise<TenantUserRow[]> {
-  const rows = await db
+  pagination: PaginationInput,
+): Promise<{ rows: TenantUserRow[]; total: number }> {
+  const baseQuery = db
+    .selectFrom("user_tenant_roles as utr")
+    .innerJoin("users", "users.id", "utr.user_id")
+    .where("utr.tenant_id", "=", tenantId);
+
+  const [rows, countRow] = await Promise.all([
+    baseQuery
+      .select([
+        "users.id as user_id",
+        "users.email",
+        "utr.role",
+        "utr.created_at",
+      ])
+      .orderBy("utr.created_at", "asc")
+      .limit(pagination.limit)
+      .offset(pagination.offset)
+      .execute(),
+    baseQuery
+      .select((eb) => eb.fn.countAll<string>().as("total"))
+      .executeTakeFirstOrThrow(),
+  ]);
+
+  return {
+    rows: rows.map((r) => ({
+      userId: r.user_id,
+      email: r.email,
+      role: r.role,
+      memberSince: r.created_at,
+    })),
+    total: Number(countRow.total),
+  };
+}
+
+/**
+ * Returns a single user's details within a tenant, or undefined if not a member.
+ * Used after a role update to return the updated member in the response.
+ */
+export async function findUserInTenant(
+  db: Kysely<Database>,
+  userId: string,
+  tenantId: string,
+): Promise<TenantUserRow | undefined> {
+  const row = await db
     .selectFrom("user_tenant_roles as utr")
     .innerJoin("users", "users.id", "utr.user_id")
     .select([
@@ -92,15 +150,16 @@ export async function findUsersInTenant(
       "utr.created_at",
     ])
     .where("utr.tenant_id", "=", tenantId)
-    .orderBy("utr.created_at", "asc")
-    .execute();
+    .where("utr.user_id", "=", userId)
+    .executeTakeFirst();
 
-  return rows.map((r) => ({
-    userId: r.user_id,
-    email: r.email,
-    role: r.role,
-    memberSince: r.created_at,
-  }));
+  if (!row) return undefined;
+  return {
+    userId: row.user_id,
+    email: row.email,
+    role: row.role,
+    memberSince: row.created_at,
+  };
 }
 
 /**

@@ -10,7 +10,11 @@ import {
   findStationByIdForTenant,
   type CreateStationInput,
   type UpdateStationInput,
+  type PaginationInput,
+  type PaginatedStations,
 } from "../repositories/stations.repo.js";
+
+export type { PaginatedStations };
 
 export class StationsService {
   constructor(private db: Kysely<Database>) {}
@@ -34,8 +38,8 @@ export class StationsService {
     return station;
   }
 
-  async getPublicStations(): Promise<Selectable<StationsTable>[]> {
-    return findPublicStations(this.db);
+  async getPublicStations(pagination: PaginationInput): Promise<PaginatedStations> {
+    return findPublicStations(this.db, pagination);
   }
 
   async getPublicStation(stationId: string): Promise<Selectable<StationsTable>> {
@@ -46,8 +50,8 @@ export class StationsService {
     return station;
   }
 
-  async getTenantStations(tenantId: string): Promise<Selectable<StationsTable>[]> {
-    return findStationsByTenant(this.db, tenantId);
+  async getTenantStations(tenantId: string, pagination: PaginationInput): Promise<PaginatedStations> {
+    return findStationsByTenant(this.db, tenantId, pagination);
   }
 
   async getTenantStation(

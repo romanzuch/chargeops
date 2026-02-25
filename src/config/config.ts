@@ -31,4 +31,11 @@ export const config = {
    * Auto-detected from NODE_ENV: true for production, false for development/test.
    */
   refreshTokenCookieSecure: env.NODE_ENV === "production",
+  /**
+   * Allowed CORS origins. Parsed from CORS_ORIGIN env var (comma-separated).
+   * Empty array means CORS is disabled.
+   */
+  corsOrigins: env.CORS_ORIGIN
+    ? env.CORS_ORIGIN.split(",").map((o) => o.trim()).filter(Boolean)
+    : [],
 } as const;

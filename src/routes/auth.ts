@@ -11,6 +11,8 @@ import {
   LogoutRequestSchema,
   AccessTokenResponseSchema,
   CurrentUserResponseSchema,
+  ChangePasswordRequestSchema,
+  UpdateProfileRequestSchema,
 } from "../http/schemas/auth.schemas.js";
 import { AuthService } from "../services/auth.service.js";
 import { sha256Hex } from "../security/tokens.js";
@@ -51,43 +53,54 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
    * - 400: validation failure or weak password
    * - 409: email already registered
    */
-  app.post("/auth/register", async (req, reply) => {
-    // Validate request body
-    let validated;
-    try {
-      validated = RegisterRequestSchema.parse(req.body);
-    } catch (err) {
-      if (err instanceof ZodError) {
-        const errors = err.flatten().fieldErrors;
-        throw new BadRequestError("Validation failed", JSON.stringify(errors));
+  app.post(
+    "/auth/register",
+    {
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: "10 minutes",
+        },
+      },
+    },
+    async (req, reply) => {
+      // Validate request body
+      let validated;
+      try {
+        validated = RegisterRequestSchema.parse(req.body);
+      } catch (err) {
+        if (err instanceof ZodError) {
+          const errors = err.flatten().fieldErrors;
+          throw new BadRequestError("Validation failed", JSON.stringify(errors));
+        }
+        throw err;
       }
-      throw err;
-    }
 
-    // Register user and generate tokens
-    const result = await getAuthService().register({
-      email: validated.email,
-      password: validated.password,
-      tenantId: validated.tenantId,
-      ...(validated.name && { name: validated.name }),
-    });
+      // Register user and generate tokens
+      const result = await getAuthService().register({
+        email: validated.email,
+        password: validated.password,
+        tenantId: validated.tenantId,
+        ...(validated.name && { name: validated.name }),
+      });
 
-    // Set refresh token cookie
-    _setRefreshTokenCookie(reply, result.refreshToken);
+      // Set refresh token cookie
+      _setRefreshTokenCookie(reply, result.refreshToken);
 
-    // Build response
-    const response: Record<string, unknown> = AccessTokenResponseSchema.parse({
-      accessToken: result.accessToken,
-      expiresIn: result.expiresIn,
-    });
+      // Build response
+      const response: Record<string, unknown> = AccessTokenResponseSchema.parse({
+        accessToken: result.accessToken,
+        expiresIn: result.expiresIn,
+      });
 
-    // Optionally include refresh token in body
-    if (config.refreshTokenInBody) {
-      response.refreshToken = result.refreshToken;
-    }
+      // Optionally include refresh token in body
+      if (config.refreshTokenInBody) {
+        response.refreshToken = result.refreshToken;
+      }
 
-    return reply.status(201).send(response);
-  });
+      return reply.status(201).send(response);
+    },
+  );
 
   /**
    * POST /auth/login
@@ -102,41 +115,52 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
    * - 400: validation failure
    * - 401: invalid credentials (generic for security)
    */
-  app.post("/auth/login", async (req, reply) => {
-    // Validate request body
-    let validated;
-    try {
-      validated = LoginRequestSchema.parse(req.body);
-    } catch (err) {
-      if (err instanceof ZodError) {
-        const errors = err.flatten().fieldErrors;
-        throw new BadRequestError("Validation failed", JSON.stringify(errors));
+  app.post(
+    "/auth/login",
+    {
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: "5 minutes",
+        },
+      },
+    },
+    async (req, reply) => {
+      // Validate request body
+      let validated;
+      try {
+        validated = LoginRequestSchema.parse(req.body);
+      } catch (err) {
+        if (err instanceof ZodError) {
+          const errors = err.flatten().fieldErrors;
+          throw new BadRequestError("Validation failed", JSON.stringify(errors));
+        }
+        throw err;
       }
-      throw err;
-    }
 
-    // Authenticate user
-    const result = await getAuthService().login({
-      email: validated.email,
-      password: validated.password,
-    });
+      // Authenticate user
+      const result = await getAuthService().login({
+        email: validated.email,
+        password: validated.password,
+      });
 
-    // Set refresh token cookie
-    _setRefreshTokenCookie(reply, result.refreshToken);
+      // Set refresh token cookie
+      _setRefreshTokenCookie(reply, result.refreshToken);
 
-    // Build response
-    const response: Record<string, unknown> = AccessTokenResponseSchema.parse({
-      accessToken: result.accessToken,
-      expiresIn: result.expiresIn,
-    });
+      // Build response
+      const response: Record<string, unknown> = AccessTokenResponseSchema.parse({
+        accessToken: result.accessToken,
+        expiresIn: result.expiresIn,
+      });
 
-    // Optionally include refresh token in body
-    if (config.refreshTokenInBody) {
-      response.refreshToken = result.refreshToken;
-    }
+      // Optionally include refresh token in body
+      if (config.refreshTokenInBody) {
+        response.refreshToken = result.refreshToken;
+      }
 
-    return reply.send(response);
-  });
+      return reply.send(response);
+    },
+  );
 
   /**
    * POST /auth/refresh
@@ -155,52 +179,63 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
    * - 400: validation or missing token
    * - 401: invalid, expired, or replayed token
    */
-  app.post("/auth/refresh", async (req, reply) => {
-    // Get refresh token from cookie or body
-    let refreshToken: string | undefined = req.cookies[REFRESH_TOKEN_COOKIE_NAME];
-    if (!refreshToken) {
-      let validated;
-      try {
-        validated = RefreshRequestSchema.parse(req.body);
-      } catch (err) {
-        if (err instanceof ZodError) {
-          const errors = err.flatten().fieldErrors;
-          throw new BadRequestError("Validation failed", JSON.stringify(errors));
+  app.post(
+    "/auth/refresh",
+    {
+      config: {
+        rateLimit: {
+          max: 20,
+          timeWindow: "1 minute",
+        },
+      },
+    },
+    async (req, reply) => {
+      // Get refresh token from cookie or body
+      let refreshToken: string | undefined = req.cookies[REFRESH_TOKEN_COOKIE_NAME];
+      if (!refreshToken) {
+        let validated;
+        try {
+          validated = RefreshRequestSchema.parse(req.body);
+        } catch (err) {
+          if (err instanceof ZodError) {
+            const errors = err.flatten().fieldErrors;
+            throw new BadRequestError("Validation failed", JSON.stringify(errors));
+          }
+          throw err;
         }
-        throw err;
+        refreshToken = validated.refreshToken;
       }
-      refreshToken = validated.refreshToken;
-    }
 
-    if (!refreshToken) {
-      throw new BadRequestError("Refresh token is required");
-    }
+      if (!refreshToken) {
+        throw new BadRequestError("Refresh token is required");
+      }
 
-    // Hash the token for database lookup
-    const tokenBuffer = Buffer.from(refreshToken, "base64url");
-    const tokenHash = await sha256Hex(tokenBuffer);
+      // Hash the token for database lookup
+      const tokenBuffer = Buffer.from(refreshToken, "base64url");
+      const tokenHash = await sha256Hex(tokenBuffer);
 
-    // Refresh access token (rotates refresh token)
-    const result = await getAuthService().refreshAccessToken({
-      refreshTokenHash: tokenHash,
-    });
+      // Refresh access token (rotates refresh token)
+      const result = await getAuthService().refreshAccessToken({
+        refreshTokenHash: tokenHash,
+      });
 
-    // Set new refresh token cookie
-    _setRefreshTokenCookie(reply, result.refreshToken);
+      // Set new refresh token cookie
+      _setRefreshTokenCookie(reply, result.refreshToken);
 
-    // Build response
-    const response: Record<string, unknown> = AccessTokenResponseSchema.parse({
-      accessToken: result.accessToken,
-      expiresIn: result.expiresIn,
-    });
+      // Build response
+      const response: Record<string, unknown> = AccessTokenResponseSchema.parse({
+        accessToken: result.accessToken,
+        expiresIn: result.expiresIn,
+      });
 
-    // Optionally include refresh token in body
-    if (config.refreshTokenInBody) {
-      response.refreshToken = result.refreshToken;
-    }
+      // Optionally include refresh token in body
+      if (config.refreshTokenInBody) {
+        response.refreshToken = result.refreshToken;
+      }
 
-    return reply.send(response);
-  });
+      return reply.send(response);
+    },
+  );
 
   /**
    * POST /auth/logout
@@ -276,6 +311,82 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
     return CurrentUserResponseSchema.parse(user);
   });
+
+  /**
+   * PATCH /me/password
+   *
+   * Change the authenticated user's password.
+   *
+   * Requires valid JWT. Verifies the current password before updating.
+   *
+   * Request: { currentPassword, newPassword }
+   * Response (204): No Content
+   *
+   * Errors:
+   * - 400: weak password
+   * - 401: missing or invalid token, or wrong current password
+   */
+  app.patch(
+    "/me/password",
+    { preHandler: [app.verifyJwt] },
+    async (req, reply) => {
+      let body;
+      try {
+        body = ChangePasswordRequestSchema.parse(req.body);
+      } catch (err) {
+        if (err instanceof ZodError) {
+          throw new BadRequestError("Validation failed", JSON.stringify(err.flatten().fieldErrors));
+        }
+        throw err;
+      }
+
+      await getAuthService().changePassword({
+        userId: req.jwtUser!.sub,
+        currentPassword: body.currentPassword,
+        newPassword: body.newPassword,
+      });
+
+      return reply.status(204).send();
+    },
+  );
+
+  /**
+   * PATCH /me
+   *
+   * Update the authenticated user's profile (currently: email).
+   *
+   * Requires valid JWT.
+   *
+   * Request: { email? } — at least one field required
+   * Response (200): { userId, email }
+   *
+   * Errors:
+   * - 400: validation failure
+   * - 401: missing or invalid token
+   * - 409: email already in use
+   */
+  app.patch(
+    "/me",
+    { preHandler: [app.verifyJwt] },
+    async (req, reply) => {
+      let body;
+      try {
+        body = UpdateProfileRequestSchema.parse(req.body);
+      } catch (err) {
+        if (err instanceof ZodError) {
+          throw new BadRequestError("Validation failed", JSON.stringify(err.flatten().fieldErrors));
+        }
+        throw err;
+      }
+
+      const updated = await getAuthService().updateProfile({
+        userId: req.jwtUser!.sub,
+        ...(body.email !== undefined && { email: body.email }),
+      });
+
+      return reply.send(updated);
+    },
+  );
 };
 
 /**
