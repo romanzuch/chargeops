@@ -68,6 +68,60 @@ export async function findFirstTenantForUser(
   return { tenantId: row.tenant_id, role: row.role };
 }
 
+export interface TenantUserRow {
+  userId: string;
+  email: string;
+  role: Role;
+  memberSince: Date;
+}
+
+/**
+ * Returns all users in a tenant with their roles, ordered by join date.
+ */
+export async function findUsersInTenant(
+  db: Kysely<Database>,
+  tenantId: string,
+): Promise<TenantUserRow[]> {
+  const rows = await db
+    .selectFrom("user_tenant_roles as utr")
+    .innerJoin("users", "users.id", "utr.user_id")
+    .select([
+      "users.id as user_id",
+      "users.email",
+      "utr.role",
+      "utr.created_at",
+    ])
+    .where("utr.tenant_id", "=", tenantId)
+    .orderBy("utr.created_at", "asc")
+    .execute();
+
+  return rows.map((r) => ({
+    userId: r.user_id,
+    email: r.email,
+    role: r.role,
+    memberSince: r.created_at,
+  }));
+}
+
+/**
+ * Updates a user's role within a tenant. Returns the updated row, or
+ * undefined if the user is not a member of that tenant.
+ */
+export async function updateUserTenantRole(
+  db: Kysely<Database>,
+  userId: string,
+  tenantId: string,
+  newRole: Role,
+): Promise<Selectable<UserTenantRolesTable> | undefined> {
+  return db
+    .updateTable("user_tenant_roles")
+    .set({ role: newRole })
+    .where("user_id", "=", userId)
+    .where("tenant_id", "=", tenantId)
+    .returningAll()
+    .executeTakeFirst();
+}
+
 /**
  * Returns the role for a user within a specific tenant, or undefined if the
  * user is not a member of that tenant.
