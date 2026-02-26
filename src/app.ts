@@ -15,6 +15,8 @@ import { healthRoutes } from "./routes/health.js";
 import { stationRoutes } from "./routes/stations.js";
 import { tenantRoutes } from "./routes/tenants.js";
 import { tenantUserRoutes } from "./routes/tenant-users.js";
+import { locationRoutes } from "./routes/locations.js";
+import { plugRoutes } from "./routes/plugs.js";
 
 /**
  * Builds the Fastify application.
@@ -90,6 +92,8 @@ export function buildApp(): FastifyInstance {
   app.register(adminRoutes);
   app.register(tenantRoutes);
   app.register(tenantUserRoutes);
+  app.register(locationRoutes);
+  app.register(plugRoutes);
 
   return app;
 }

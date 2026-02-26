@@ -58,8 +58,7 @@ describe("createStation", () => {
     expect(row.status).toBe("active");
     expect(row.visibility).toBe("public");
     expect(row.external_id).toBeNull();
-    expect(row.latitude).toBeNull();
-    expect(row.longitude).toBeNull();
+    expect(row.location_id).toBeNull();
     expect(row.deleted_at).toBeNull();
     expect(row.created_at).toBeInstanceOf(Date);
     expect(row.updated_at).toBeInstanceOf(Date);
@@ -71,15 +70,11 @@ describe("createStation", () => {
       tenantId,
       name: "Station B",
       externalId: "ext-123",
-      latitude: 48.1351,
-      longitude: 11.582,
       status: "planning",
       visibility: "private",
     });
 
     expect(row.external_id).toBe("ext-123");
-    expect(row.latitude).toBe(48.1351);
-    expect(row.longitude).toBe(11.582);
     expect(row.status).toBe("planning");
     expect(row.visibility).toBe("private");
   });
@@ -129,16 +124,12 @@ describe("updateStation", () => {
       name: "After",
       status: "inactive",
       visibility: "private",
-      latitude: 52.52,
-      longitude: 13.405,
     });
 
     expect(updated).toBeDefined();
     expect(updated!.name).toBe("After");
     expect(updated!.status).toBe("inactive");
     expect(updated!.visibility).toBe("private");
-    expect(updated!.latitude).toBe(52.52);
-    expect(updated!.longitude).toBe(13.405);
     expect(updated!.updated_at.getTime()).toBeGreaterThanOrEqual(created.updated_at.getTime());
   });
 
@@ -297,7 +288,11 @@ describe("findPublicStationById", () => {
 
   it("returns undefined for a soft-deleted public station", async () => {
     const tenantId = await seedTenant("find-public-by-id-deleted");
-    const station = await createStation(db, { tenantId, name: "Deleted Public", visibility: "public" });
+    const station = await createStation(db, {
+      tenantId,
+      name: "Deleted Public",
+      visibility: "public",
+    });
     await softDelete(station.id);
 
     const found = await findPublicStationById(db, station.id);

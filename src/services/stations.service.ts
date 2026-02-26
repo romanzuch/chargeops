@@ -50,14 +50,14 @@ export class StationsService {
     return station;
   }
 
-  async getTenantStations(tenantId: string, pagination: PaginationInput): Promise<PaginatedStations> {
+  async getTenantStations(
+    tenantId: string,
+    pagination: PaginationInput,
+  ): Promise<PaginatedStations> {
     return findStationsByTenant(this.db, tenantId, pagination);
   }
 
-  async getTenantStation(
-    stationId: string,
-    tenantId: string,
-  ): Promise<Selectable<StationsTable>> {
+  async getTenantStation(stationId: string, tenantId: string): Promise<Selectable<StationsTable>> {
     const station = await findStationByIdForTenant(this.db, stationId, tenantId);
     if (!station) {
       throw new NotFoundError("Station not found");

@@ -6,8 +6,7 @@ export interface CreateStationInput {
   tenantId: string;
   name: string;
   externalId?: string;
-  latitude?: number;
-  longitude?: number;
+  locationId?: string;
   status?: StationStatus;
   visibility?: StationVisibility;
 }
@@ -15,8 +14,7 @@ export interface CreateStationInput {
 export interface UpdateStationInput {
   name?: string;
   externalId?: string | null;
-  latitude?: number | null;
-  longitude?: number | null;
+  locationId?: string | null;
   status?: StationStatus;
   visibility?: StationVisibility;
 }
@@ -31,8 +29,7 @@ export async function createStation(
       tenant_id: input.tenantId,
       name: input.name,
       ...(input.externalId !== undefined && { external_id: input.externalId }),
-      ...(input.latitude !== undefined && { latitude: input.latitude }),
-      ...(input.longitude !== undefined && { longitude: input.longitude }),
+      ...(input.locationId !== undefined && { location_id: input.locationId }),
       ...(input.status !== undefined && { status: input.status }),
       ...(input.visibility !== undefined && { visibility: input.visibility }),
     })
@@ -51,8 +48,7 @@ export async function updateStation(
     .set({
       ...(input.name !== undefined && { name: input.name }),
       ...(input.externalId !== undefined && { external_id: input.externalId }),
-      ...(input.latitude !== undefined && { latitude: input.latitude }),
-      ...(input.longitude !== undefined && { longitude: input.longitude }),
+      ...(input.locationId !== undefined && { location_id: input.locationId }),
       ...(input.status !== undefined && { status: input.status }),
       ...(input.visibility !== undefined && { visibility: input.visibility }),
       updated_at: sql<Date>`now()`,
@@ -100,9 +96,7 @@ export async function findStationsByTenant(
 
   const [rows, countRow] = await Promise.all([
     baseQuery.selectAll().limit(pagination.limit).offset(pagination.offset).execute(),
-    baseQuery
-      .select((eb) => eb.fn.countAll<string>().as("total"))
-      .executeTakeFirstOrThrow(),
+    baseQuery.select((eb) => eb.fn.countAll<string>().as("total")).executeTakeFirstOrThrow(),
   ]);
 
   return { rows, total: Number(countRow.total) };
@@ -133,9 +127,7 @@ export async function findPublicStations(
 
   const [rows, countRow] = await Promise.all([
     baseQuery.selectAll().limit(pagination.limit).offset(pagination.offset).execute(),
-    baseQuery
-      .select((eb) => eb.fn.countAll<string>().as("total"))
-      .executeTakeFirstOrThrow(),
+    baseQuery.select((eb) => eb.fn.countAll<string>().as("total")).executeTakeFirstOrThrow(),
   ]);
 
   return { rows, total: Number(countRow.total) };
