@@ -98,7 +98,7 @@ describe("Station Endpoints", () => {
     it("returns public stations without auth", async () => {
       const res = await app.inject({ method: "GET", url: "/stations" });
       expect(res.statusCode).toBe(200);
-      expect(Array.isArray(res.json())).toBe(true);
+      expect(Array.isArray(res.json().data)).toBe(true);
     });
   });
 
@@ -237,7 +237,7 @@ describe("Station Endpoints", () => {
       });
 
       expect(res.statusCode).toBe(200);
-      const stations = res.json<{ visibility: string }[]>();
+      const stations = res.json<{ data: { visibility: string }[] }>().data;
       expect(Array.isArray(stations)).toBe(true);
       const hasPrivate = stations.some((s) => s.visibility === "private");
       expect(hasPrivate).toBe(true);
