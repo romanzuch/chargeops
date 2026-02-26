@@ -15,6 +15,7 @@ export type StationVisibility = "public" | "private";
 export type LocationVisibility = "public" | "private";
 export type ConnectorType = "ccs" | "chademo" | "type2" | "type1" | "schuko" | "other";
 export type PlugStatus = "available" | "occupied" | "out_of_service" | "reserved";
+export type ChargingSessionStatus = "active" | "completed" | "error";
 
 /**
  * Notes on timestamps:
@@ -156,6 +157,22 @@ export interface CustomerGroupTariffsTable {
   created_at: Generated<Timestamp>;
 }
 
+export interface ChargingSessionsTable {
+  id: Generated<string>; // uuid, gen_random_uuid()
+  user_id: string; // uuid
+  plug_id: string; // uuid
+  tenant_id: string; // uuid
+  tariff_id: string | null; // uuid; null for free sessions
+  started_at: Generated<Timestamp>;
+  ended_at: Timestamp | null;
+  energy_kwh: number | null;
+  cost: number | null;
+  currency: string | null;
+  status: Generated<ChargingSessionStatus>; // default 'active'
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+
 /**
  * Root DB type for Kysely.
  *
@@ -177,4 +194,5 @@ export interface Database {
   tariff_zone_tariffs: TariffZoneTariffsTable;
   customer_group_tariff_zones: CustomerGroupTariffZonesTable;
   customer_group_tariffs: CustomerGroupTariffsTable;
+  charging_sessions: ChargingSessionsTable;
 }
