@@ -81,7 +81,11 @@ export const locationRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: [app.verifyJwt, app.verifyTenant, app.verifyRole([...ALL_TENANT_ROLES])] },
     async (req, reply) => {
       const pagination = PaginationQuerySchema.parse(req.query);
-      const result = await getService().getTenantLocations(req.tenantId!, pagination);
+      const result = await getService().getAccessibleLocations(
+        req.tenantId!,
+        req.jwtUser!.sub,
+        pagination,
+      );
       return reply.send(paginatedResponse(result.rows.map(toLocationResponse), result.total));
     },
   );

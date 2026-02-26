@@ -17,6 +17,10 @@ import { tenantRoutes } from "./routes/tenants.js";
 import { tenantUserRoutes } from "./routes/tenant-users.js";
 import { locationRoutes } from "./routes/locations.js";
 import { plugRoutes } from "./routes/plugs.js";
+import { tariffRoutes } from "./routes/tariffs.js";
+import { customerGroupRoutes } from "./routes/customer-groups.js";
+import { tariffZoneRoutes } from "./routes/tariff-zones.js";
+import { sessionRoutes } from "./routes/sessions.js";
 
 /**
  * Builds the Fastify application.
@@ -94,6 +98,10 @@ export function buildApp(): FastifyInstance {
   app.register(tenantUserRoutes);
   app.register(locationRoutes);
   app.register(plugRoutes);
+  app.register(tariffRoutes);
+  app.register(customerGroupRoutes);
+  app.register(tariffZoneRoutes);
+  app.register(sessionRoutes);
 
   return app;
 }

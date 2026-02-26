@@ -7,6 +7,7 @@ import {
   findPublicLocations,
   findPublicLocationById,
   findLocationsByTenant,
+  findAccessibleLocations,
   updateLocation,
   softDeleteLocation,
   type CreateLocationInput,
@@ -63,6 +64,14 @@ export class LocationsService {
     pagination: PaginationInput,
   ): Promise<PaginatedLocations> {
     return findLocationsByTenant(this.db, tenantId, pagination);
+  }
+
+  async getAccessibleLocations(
+    tenantId: string,
+    userId: string,
+    pagination: PaginationInput,
+  ): Promise<PaginatedLocations> {
+    return findAccessibleLocations(this.db, tenantId, userId, pagination);
   }
 
   async getTenantLocation(
