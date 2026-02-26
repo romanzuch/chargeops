@@ -20,6 +20,7 @@ import { plugRoutes } from "./routes/plugs.js";
 import { tariffRoutes } from "./routes/tariffs.js";
 import { customerGroupRoutes } from "./routes/customer-groups.js";
 import { tariffZoneRoutes } from "./routes/tariff-zones.js";
+import { sessionRoutes } from "./routes/sessions.js";
 
 /**
  * Builds the Fastify application.
@@ -100,6 +101,7 @@ export function buildApp(): FastifyInstance {
   app.register(tariffRoutes);
   app.register(customerGroupRoutes);
   app.register(tariffZoneRoutes);
+  app.register(sessionRoutes);
 
   return app;
 }
