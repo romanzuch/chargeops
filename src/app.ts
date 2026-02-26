@@ -56,6 +56,8 @@ export function buildApp(): FastifyInstance {
   app.register(fastifyRateLimit, {
     global: false, // opt-in per route, not global blanket limit
     keyGenerator: (req) => req.ip,
+    // Skip rate limiting in test environment so injected requests don't exhaust limits
+    allowList: process.env.NODE_ENV === "test" ? () => true : undefined,
   });
 
   // OpenAPI docs

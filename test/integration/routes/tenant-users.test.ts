@@ -106,17 +106,17 @@ describe("Tenant User Management Endpoints", () => {
       });
 
       expect(res.statusCode).toBe(200);
-      const body = res.json<{ userId: string; email: string; role: string; memberSince: string }[]>();
-      expect(Array.isArray(body)).toBe(true);
-      expect(body.length).toBeGreaterThanOrEqual(2);
+      const body = res.json<{ data: { userId: string; email: string; role: string; memberSince: string }[] }>();
+      expect(Array.isArray(body.data)).toBe(true);
+      expect(body.data.length).toBeGreaterThanOrEqual(2);
 
-      const admin = body.find((u) => u.userId === adminUserId);
+      const admin = body.data.find((u) => u.userId === adminUserId);
       expect(admin).toBeDefined();
       expect(admin!.role).toBe("tenant_admin");
       expect(admin!.email).toBe("useradmin@example.com");
       expect(typeof admin!.memberSince).toBe("string");
 
-      const viewer = body.find((u) => u.userId === viewerUserId);
+      const viewer = body.data.find((u) => u.userId === viewerUserId);
       expect(viewer).toBeDefined();
       expect(viewer!.role).toBe("tenant_view");
     });
