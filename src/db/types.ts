@@ -12,6 +12,9 @@ import type { Generated } from "kysely";
 export type Role = "tenant_admin" | "tenant_view" | "driver";
 export type StationStatus = "active" | "planning" | "inactive" | "error";
 export type StationVisibility = "public" | "private";
+export type LocationVisibility = "public" | "private";
+export type ConnectorType = "ccs" | "chademo" | "type2" | "type1" | "schuko" | "other";
+export type PlugStatus = "available" | "occupied" | "out_of_service" | "reserved";
 
 /**
  * Notes on timestamps:
@@ -60,10 +63,35 @@ export interface StationsTable {
   external_id: string | null;
   name: string;
   tenant_id: string; // uuid
-  latitude: number | null;
-  longitude: number | null;
+  location_id: string | null; // uuid; FK to locations
   status: Generated<StationStatus>; // default 'active'
   visibility: Generated<StationVisibility>; // default 'public'
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+}
+
+export interface LocationsTable {
+  id: Generated<string>; // uuid, gen_random_uuid()
+  tenant_id: string; // uuid
+  name: string;
+  address: string | null;
+  city: string | null;
+  country: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  visibility: Generated<LocationVisibility>; // default 'public'
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+}
+
+export interface PlugsTable {
+  id: Generated<string>; // uuid, gen_random_uuid()
+  station_id: string; // uuid
+  connector_type: ConnectorType;
+  max_power_kw: number;
+  status: Generated<PlugStatus>; // default 'available'
   created_at: Generated<Timestamp>;
   updated_at: Generated<Timestamp>;
   deleted_at: Timestamp | null;
@@ -80,4 +108,6 @@ export interface Database {
   user_tenant_roles: UserTenantRolesTable;
   refresh_tokens: RefreshTokensTable;
   stations: StationsTable;
+  locations: LocationsTable;
+  plugs: PlugsTable;
 }

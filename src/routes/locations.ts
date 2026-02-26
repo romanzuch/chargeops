@@ -1,0 +1,170 @@
+import type { FastifyPluginAsync } from "fastify";
+import { ZodError } from "zod";
+import { getDb } from "../db/kysely.js";
+import { BadRequestError } from "../http/errors.js";
+import {
+  CreateLocationBodySchema,
+  UpdateLocationBodySchema,
+  LocationResponseSchema,
+} from "../http/schemas/locations.schemas.js";
+import { PaginationQuerySchema, paginatedResponse } from "../http/schemas/pagination.schemas.js";
+import { LocationsService } from "../services/locations.service.js";
+import type { Selectable } from "kysely";
+import type { LocationsTable } from "../db/types.js";
+
+function toLocationResponse(location: Selectable<LocationsTable>) {
+  return LocationResponseSchema.parse({
+    id: location.id,
+    tenantId: location.tenant_id,
+    name: location.name,
+    address: location.address,
+    city: location.city,
+    country: location.country,
+    latitude: location.latitude,
+    longitude: location.longitude,
+    visibility: location.visibility,
+    createdAt: location.created_at.toISOString(),
+    updatedAt: location.updated_at.toISOString(),
+    deletedAt: location.deleted_at?.toISOString() ?? null,
+  });
+}
+
+const ALL_TENANT_ROLES = ["tenant_admin", "tenant_view", "driver"] as const;
+
+/**
+ * Location endpoints.
+ *
+ * Public read (no auth):
+ * - GET /locations        — paginated public locations
+ * - GET /locations/:id    — single public location
+ *
+ * Tenant read (JWT + tenant + any role):
+ * - GET /tenant/locations       — all tenant locations (accessible to user)
+ * - GET /tenant/locations/:id   — single tenant location
+ *
+ * Tenant write (JWT + tenant + tenant_admin):
+ * - POST   /locations         — create
+ * - PATCH  /locations/:id     — update
+ * - DELETE /locations/:id     — soft-delete
+ */
+export const locationRoutes: FastifyPluginAsync = async (app) => {
+  let locationsService: LocationsService | undefined;
+  const getService = (): LocationsService => {
+    if (!locationsService) {
+      locationsService = new LocationsService(getDb());
+    }
+    return locationsService;
+  };
+
+  // ---------------------------------------------------------------------------
+  // Public read endpoints
+  // ---------------------------------------------------------------------------
+
+  app.get("/locations", async (req, reply) => {
+    const pagination = PaginationQuerySchema.parse(req.query);
+    const result = await getService().getPublicLocations(pagination);
+    return reply.send(paginatedResponse(result.rows.map(toLocationResponse), result.total));
+  });
+
+  app.get("/locations/:id", async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const location = await getService().getPublicLocation(id);
+    return reply.send(toLocationResponse(location));
+  });
+
+  // ---------------------------------------------------------------------------
+  // Tenant read endpoints
+  // ---------------------------------------------------------------------------
+
+  app.get(
+    "/tenant/locations",
+    { preHandler: [app.verifyJwt, app.verifyTenant, app.verifyRole([...ALL_TENANT_ROLES])] },
+    async (req, reply) => {
+      const pagination = PaginationQuerySchema.parse(req.query);
+      const result = await getService().getTenantLocations(req.tenantId!, pagination);
+      return reply.send(paginatedResponse(result.rows.map(toLocationResponse), result.total));
+    },
+  );
+
+  app.get(
+    "/tenant/locations/:id",
+    { preHandler: [app.verifyJwt, app.verifyTenant, app.verifyRole([...ALL_TENANT_ROLES])] },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      const location = await getService().getTenantLocation(id, req.tenantId!);
+      return reply.send(toLocationResponse(location));
+    },
+  );
+
+  // ---------------------------------------------------------------------------
+  // Tenant write endpoints
+  // ---------------------------------------------------------------------------
+
+  app.post(
+    "/locations",
+    { preHandler: [app.verifyJwt, app.verifyTenant, app.verifyRole(["tenant_admin"])] },
+    async (req, reply) => {
+      let body;
+      try {
+        body = CreateLocationBodySchema.parse(req.body);
+      } catch (err) {
+        if (err instanceof ZodError) {
+          throw new BadRequestError("Validation failed", JSON.stringify(err.flatten().fieldErrors));
+        }
+        throw err;
+      }
+
+      const location = await getService().createLocation(req.tenantId!, {
+        name: body.name,
+        ...(body.address !== undefined && { address: body.address }),
+        ...(body.city !== undefined && { city: body.city }),
+        ...(body.country !== undefined && { country: body.country }),
+        ...(body.latitude !== undefined && { latitude: body.latitude }),
+        ...(body.longitude !== undefined && { longitude: body.longitude }),
+        ...(body.visibility !== undefined && { visibility: body.visibility }),
+      });
+
+      return reply.status(201).send(toLocationResponse(location));
+    },
+  );
+
+  app.patch(
+    "/locations/:id",
+    { preHandler: [app.verifyJwt, app.verifyTenant, app.verifyRole(["tenant_admin"])] },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+
+      let body;
+      try {
+        body = UpdateLocationBodySchema.parse(req.body);
+      } catch (err) {
+        if (err instanceof ZodError) {
+          throw new BadRequestError("Validation failed", JSON.stringify(err.flatten().fieldErrors));
+        }
+        throw err;
+      }
+
+      const location = await getService().updateLocation(id, req.tenantId!, {
+        ...(body.name !== undefined && { name: body.name }),
+        ...(body.address !== undefined && { address: body.address }),
+        ...(body.city !== undefined && { city: body.city }),
+        ...(body.country !== undefined && { country: body.country }),
+        ...(body.latitude !== undefined && { latitude: body.latitude }),
+        ...(body.longitude !== undefined && { longitude: body.longitude }),
+        ...(body.visibility !== undefined && { visibility: body.visibility }),
+      });
+
+      return reply.send(toLocationResponse(location));
+    },
+  );
+
+  app.delete(
+    "/locations/:id",
+    { preHandler: [app.verifyJwt, app.verifyTenant, app.verifyRole(["tenant_admin"])] },
+    async (req, reply) => {
+      const { id } = req.params as { id: string };
+      await getService().deleteLocation(id, req.tenantId!);
+      return reply.status(204).send();
+    },
+  );
+};

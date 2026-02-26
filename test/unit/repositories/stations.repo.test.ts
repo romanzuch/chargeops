@@ -10,14 +10,15 @@ import {
 } from "../../../src/repositories/stations.repo.js";
 
 /** Minimal valid station row returned from the DB. */
-function makeStation(overrides: Partial<Selectable<StationsTable>> = {}): Selectable<StationsTable> {
+function makeStation(
+  overrides: Partial<Selectable<StationsTable>> = {},
+): Selectable<StationsTable> {
   return {
     id: "station-1",
     tenant_id: "tenant-1",
     name: "Test Station",
     external_id: null,
-    latitude: null,
-    longitude: null,
+    location_id: null,
     status: "active",
     visibility: "public",
     created_at: new Date("2024-01-01"),
@@ -79,8 +80,7 @@ describe("createStation", () => {
     const [values] = captured.get("values") as [Record<string, unknown>];
     expect(values).toEqual({ tenant_id: "t1", name: "Station A" });
     expect(values).not.toHaveProperty("external_id");
-    expect(values).not.toHaveProperty("latitude");
-    expect(values).not.toHaveProperty("longitude");
+    expect(values).not.toHaveProperty("location_id");
     expect(values).not.toHaveProperty("status");
     expect(values).not.toHaveProperty("visibility");
   });
@@ -92,8 +92,6 @@ describe("createStation", () => {
       tenantId: "t1",
       name: "Station B",
       externalId: "ext-1",
-      latitude: 48.1,
-      longitude: 11.5,
       status: "planning",
       visibility: "private",
     });
@@ -103,8 +101,6 @@ describe("createStation", () => {
       tenant_id: "t1",
       name: "Station B",
       external_id: "ext-1",
-      latitude: 48.1,
-      longitude: 11.5,
       status: "planning",
       visibility: "private",
     });
@@ -140,8 +136,7 @@ describe("updateStation", () => {
     expect(setValues).toHaveProperty("name", "New Name");
     expect(setValues).toHaveProperty("updated_at"); // always present (sql`now()`)
     expect(setValues).not.toHaveProperty("external_id");
-    expect(setValues).not.toHaveProperty("latitude");
-    expect(setValues).not.toHaveProperty("longitude");
+    expect(setValues).not.toHaveProperty("location_id");
     expect(setValues).not.toHaveProperty("status");
     expect(setValues).not.toHaveProperty("visibility");
   });
