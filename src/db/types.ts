@@ -97,6 +97,65 @@ export interface PlugsTable {
   deleted_at: Timestamp | null;
 }
 
+export interface TariffsTable {
+  id: Generated<string>; // uuid, gen_random_uuid()
+  tenant_id: string; // uuid
+  name: string;
+  price_per_kwh: number | null;
+  price_per_minute: number | null;
+  price_per_session: number | null;
+  currency: Generated<string>; // default 'EUR'
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+  deleted_at: Timestamp | null;
+}
+
+export interface CustomerGroupsTable {
+  id: Generated<string>; // uuid, gen_random_uuid()
+  tenant_id: string; // uuid
+  name: string;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+
+export interface UserCustomerGroupsTable {
+  user_id: string; // uuid
+  customer_group_id: string; // uuid
+  created_at: Generated<Timestamp>;
+}
+
+export interface TariffZonesTable {
+  id: Generated<string>; // uuid, gen_random_uuid()
+  tenant_id: string; // uuid
+  name: string;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+}
+
+export interface TariffZoneLocationsTable {
+  tariff_zone_id: string; // uuid
+  location_id: string; // uuid
+  created_at: Generated<Timestamp>;
+}
+
+export interface TariffZoneTariffsTable {
+  tariff_zone_id: string; // uuid
+  tariff_id: string; // uuid
+  created_at: Generated<Timestamp>;
+}
+
+export interface CustomerGroupTariffZonesTable {
+  customer_group_id: string; // uuid
+  tariff_zone_id: string; // uuid
+  created_at: Generated<Timestamp>;
+}
+
+export interface CustomerGroupTariffsTable {
+  customer_group_id: string; // uuid
+  tariff_id: string; // uuid
+  created_at: Generated<Timestamp>;
+}
+
 /**
  * Root DB type for Kysely.
  *
@@ -110,4 +169,12 @@ export interface Database {
   stations: StationsTable;
   locations: LocationsTable;
   plugs: PlugsTable;
+  tariffs: TariffsTable;
+  customer_groups: CustomerGroupsTable;
+  user_customer_groups: UserCustomerGroupsTable;
+  tariff_zones: TariffZonesTable;
+  tariff_zone_locations: TariffZoneLocationsTable;
+  tariff_zone_tariffs: TariffZoneTariffsTable;
+  customer_group_tariff_zones: CustomerGroupTariffZonesTable;
+  customer_group_tariffs: CustomerGroupTariffsTable;
 }

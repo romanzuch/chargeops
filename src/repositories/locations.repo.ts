@@ -115,6 +115,53 @@ export async function findLocationsByTenant(
   return { rows, total: Number(countRow.total) };
 }
 
+/**
+ * Returns locations accessible to a specific user within a tenant.
+ * Visibility rules:
+ *   - Always includes public locations
+ *   - Also includes private locations in tariff zones the user's customer groups have access to
+ */
+export async function findAccessibleLocations(
+  db: Kysely<Database>,
+  tenantId: string,
+  userId: string,
+  pagination: PaginationInput,
+): Promise<PaginatedLocations> {
+  const baseQuery = db
+    .selectFrom("locations as l")
+    .where("l.tenant_id", "=", tenantId)
+    .where("l.deleted_at", "is", null)
+    .where((eb) =>
+      eb.or([
+        eb("l.visibility", "=", "public"),
+        eb.exists(
+          eb
+            .selectFrom("tariff_zone_locations as tzl")
+            .innerJoin(
+              "customer_group_tariff_zones as cgtz",
+              "cgtz.tariff_zone_id",
+              "tzl.tariff_zone_id",
+            )
+            .innerJoin(
+              "user_customer_groups as ucg",
+              "ucg.customer_group_id",
+              "cgtz.customer_group_id",
+            )
+            .select(sql<number>`1`.as("one"))
+            .whereRef("tzl.location_id", "=", "l.id")
+            .where("ucg.user_id", "=", userId),
+        ),
+      ]),
+    );
+
+  const [rows, countRow] = await Promise.all([
+    baseQuery.selectAll("l").distinct().limit(pagination.limit).offset(pagination.offset).execute(),
+    baseQuery.select((eb) => eb.fn.countAll<string>().as("total")).executeTakeFirstOrThrow(),
+  ]);
+
+  return { rows, total: Number(countRow.total) };
+}
+
 export async function updateLocation(
   db: Kysely<Database>,
   locationId: string,
