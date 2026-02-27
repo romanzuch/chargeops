@@ -349,6 +349,109 @@ curl -X GET http://localhost:3000/me \
 
 ---
 
+### PATCH /me
+
+Update the authenticated user's profile.
+
+**Request:**
+
+```
+PATCH /me
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+```
+
+```json
+{
+  "email": "newemail@example.com"
+}
+```
+
+**Fields:**
+
+| Field   | Type     | Required | Notes |
+|---------|----------|----------|-------|
+| `email` | `string` | At least one field required | New email address; normalized to lowercase |
+
+**Response (200 OK):**
+
+```json
+{
+  "userId": "550e8400-e29b-41d4-a716-446655440000",
+  "email": "newemail@example.com"
+}
+```
+
+**Error Scenarios:**
+
+| Status | Error Type   | Reason |
+|--------|--------------|--------|
+| 400    | bad-request  | Invalid email format, or no fields provided |
+| 401    | unauthorized | Missing or invalid token |
+| 409    | conflict     | Email already in use by another account |
+
+**Example cURL:**
+
+```bash
+curl -X PATCH http://localhost:3000/me \
+  -H "Authorization: Bearer <accessToken>" \
+  -H "Content-Type: application/json" \
+  -d '{ "email": "newemail@example.com" }'
+```
+
+---
+
+### PATCH /me/password
+
+Change the authenticated user's password. Verifies the current password before applying the change.
+
+**Request:**
+
+```
+PATCH /me/password
+Authorization: Bearer <accessToken>
+Content-Type: application/json
+```
+
+```json
+{
+  "currentPassword": "OldPassword123",
+  "newPassword": "NewSecurePassword456"
+}
+```
+
+**Fields:**
+
+| Field             | Type     | Required | Notes |
+|-------------------|----------|----------|-------|
+| `currentPassword` | `string` | Yes | Must match the stored hash |
+| `newPassword`     | `string` | Yes | Minimum 12 characters |
+
+**Response (204 No Content):**
+
+```
+(empty body)
+```
+
+**Error Scenarios:**
+
+| Status | Error Type   | Reason |
+|--------|--------------|--------|
+| 400    | bad-request  | New password too weak (< 12 chars) |
+| 401    | unauthorized | Missing/invalid token, or wrong current password |
+
+**Example cURL:**
+
+```bash
+curl -X PATCH http://localhost:3000/me/password \
+  -H "Authorization: Bearer <accessToken>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "currentPassword": "OldPassword123",
+    "newPassword": "NewSecurePassword456"
+  }'
+```
+
 ---
 
 ### GET /tenants
@@ -357,13 +460,18 @@ List all tenants. **Public — no authentication required.**
 
 Used by registration forms to let users pick which tenant to join.
 
+**Query params:** `limit` (default 20, max 100), `offset` (default 0)
+
 **Response (200 OK):**
 
 ```json
-[
-  { "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479", "name": "Acme Corp" },
-  { "id": "a0000000-0000-4000-8000-000000000000", "name": "Another Org" }
-]
+{
+  "data": [
+    { "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479", "name": "Acme Corp" },
+    { "id": "a0000000-0000-4000-8000-000000000000", "name": "Another Org" }
+  ],
+  "total": 2
+}
 ```
 
 **Example cURL:**
@@ -510,17 +618,16 @@ Set-Cookie: REFRESH_TOKEN=<token>; Path=/; HttpOnly; Secure; SameSite=Strict; Ma
 
 ## Rate Limiting
 
-**Status:** Hook points reserved; not implemented yet.
+Rate limiting is active on the following endpoints via `@fastify/rate-limit`:
 
-The following endpoints have reserved preHandler hook positions for future rate limiting:
+| Endpoint | Limit | Window |
+|----------|-------|--------|
+| `POST /auth/register` | 10 requests | 10 minutes |
+| `POST /auth/login` | 10 requests | 5 minutes |
+| `POST /auth/refresh` | 20 requests | 1 minute |
+| `POST /auth/logout` | (not rate-limited) | — |
 
-```typescript
-// Future implementation pattern:
-POST / auth / register; // rateLimitPlugin("auth:register", { points: 5, duration: 3600 })
-POST / auth / login; // rateLimitPlugin("auth:login", { points: 10, duration: 300 })
-POST / auth / refresh; // rateLimitPlugin("auth:refresh", { points: 20, duration: 60 })
-POST / auth / logout; // (typically not rate-limited)
-```
+Exceeding the limit returns `429 Too Many Requests`.
 
 ## Security Considerations
 
