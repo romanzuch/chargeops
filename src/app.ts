@@ -60,23 +60,12 @@ export function buildApp(): FastifyInstance {
     allowList: process.env.NODE_ENV === "test" ? () => true : undefined,
   });
 
-  // OpenAPI docs
+  // OpenAPI docs — serve the hand-written spec from doc/openapi.yaml
   app.register(fastifySwagger, {
-    openapi: {
-      info: {
-        title: "ChargeOps API",
-        description: "Multi-tenant EV charging station management API",
-        version: "1.0.0",
-      },
-      components: {
-        securitySchemes: {
-          bearerAuth: {
-            type: "http",
-            scheme: "bearer",
-            bearerFormat: "JWT",
-          },
-        },
-      },
+    mode: "static",
+    specification: {
+      path: "./doc/openapi.yaml",
+      baseDir: process.cwd(),
     },
   });
   app.register(fastifySwaggerUi, {
