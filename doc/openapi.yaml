@@ -1,0 +1,2559 @@
+openapi: 3.0.3
+info:
+  title: ChargeOps API
+  description: |
+    Multi-tenant EV charging station management API.
+
+    ## Authentication
+
+    Most endpoints require a valid JWT access token in the `Authorization: Bearer <token>` header.
+    Tenant-scoped endpoints additionally require the `X-Tenant-Id` header.
+
+    ### Token lifecycle
+    1. Call `POST /auth/register` or `POST /auth/login` → receive `accessToken` + `REFRESH_TOKEN` cookie
+    2. Pass `Authorization: Bearer <accessToken>` on protected requests
+    3. When the access token expires, call `POST /auth/refresh`
+    4. Call `POST /auth/logout` to revoke the session
+
+    ### Token TTLs
+    | Token | Default TTL |
+    |-------|------------|
+    | Access token (JWT) | 15 minutes |
+    | Refresh token (cookie) | 30 days |
+
+    ## Multi-tenancy
+
+    Tenant-scoped endpoints require **both**:
+    - `Authorization: Bearer <accessToken>`
+    - `X-Tenant-Id: <tenantId>` — must match the `tid` claim in the JWT
+
+    Super admins (`isSuperAdmin: true` in JWT) bypass tenant checks and can access `/admin/*` endpoints.
+
+    ## Error responses
+
+    All errors follow [RFC 9457 Problem Details](https://www.rfc-editor.org/rfc/rfc9457).
+    Content-Type: `application/problem+json`.
+
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:3000
+    description: Local development
+
+tags:
+  - name: health
+    description: Liveness probe
+  - name: auth
+    description: Registration, login, token management, and user profile
+  - name: tenants
+    description: Public tenant discovery (used by registration forms)
+  - name: admin
+    description: Super-admin tenant management
+  - name: tenant-users
+    description: User management within a tenant (tenant_admin only)
+  - name: stations
+    description: EV charging stations
+  - name: locations
+    description: Physical locations where stations are installed
+  - name: plugs
+    description: Charging connectors attached to stations
+  - name: tariffs
+    description: Pricing tariff definitions
+  - name: customer-groups
+    description: User segments for targeted pricing
+  - name: tariff-zones
+    description: Geographic or logical zones linked to pricing rules
+  - name: sessions
+    description: Charging session lifecycle
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token from POST /auth/login or POST /auth/register
+    tenantId:
+      type: apiKey
+      in: header
+      name: X-Tenant-Id
+      description: UUID of the tenant to operate in (must match `tid` in your JWT)
+
+  parameters:
+    limit:
+      name: limit
+      in: query
+      description: Maximum results to return (1–100)
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    offset:
+      name: offset
+      in: query
+      description: Results to skip
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+    id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    userId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    stationId:
+      name: stationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    plugId:
+      name: plugId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    locationId:
+      name: locationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    tariffId:
+      name: tariffId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    zoneId:
+      name: zoneId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    # ── Shared ─────────────────────────────────────────────────────────────────
+    ProblemDetails:
+      type: object
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          example: "https://errors.chargeops.dev/bad-request"
+        title:
+          type: string
+          example: "Bad Request"
+        status:
+          type: integer
+          example: 400
+        detail:
+          type: string
+          example: "Password must be at least 12 characters"
+        instance:
+          type: string
+          example: "/auth/register"
+        traceId:
+          type: string
+          example: "req-550e8400-e29b-41d4-a716-446655440000"
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+          description: Field-level validation errors (400 only)
+
+    # ── Auth ───────────────────────────────────────────────────────────────────
+    RegisterRequest:
+      type: object
+      required: [email, password, tenantId]
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        password:
+          type: string
+          minLength: 12
+          example: MySecurePassword123
+        tenantId:
+          type: string
+          format: uuid
+          description: UUID of an existing tenant to join (see GET /tenants)
+        name:
+          type: string
+          maxLength: 255
+          description: Optional display name
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 1
+
+    RefreshRequest:
+      type: object
+      properties:
+        refreshToken:
+          type: string
+          description: Required if not sending via REFRESH_TOKEN cookie
+
+    LogoutRequest:
+      type: object
+      properties:
+        refreshToken:
+          type: string
+          description: Required if not sending via REFRESH_TOKEN cookie
+
+    AccessTokenResponse:
+      type: object
+      required: [accessToken, expiresIn]
+      properties:
+        accessToken:
+          type: string
+          description: JWT access token (HS256)
+        expiresIn:
+          type: integer
+          description: Lifetime in seconds
+          example: 900
+        refreshToken:
+          type: string
+          description: Only present when REFRESH_TOKEN_IN_BODY=true
+
+    CurrentUserResponse:
+      type: object
+      required: [userId, email, tenantId, role]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        tenantId:
+          type: string
+          format: uuid
+          nullable: true
+          description: null for super admins
+        role:
+          type: string
+          enum: [super_admin, tenant_admin, tenant_view, driver]
+
+    UpdateProfileRequest:
+      type: object
+      description: At least one field required
+      properties:
+        email:
+          type: string
+          format: email
+
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+          minLength: 12
+
+    # ── Tenants ────────────────────────────────────────────────────────────────
+    TenantListItem:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+
+    TenantAdminItem:
+      type: object
+      required: [id, name, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    CreateTenantRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+
+    # ── Tenant users ───────────────────────────────────────────────────────────
+    TenantUserResponse:
+      type: object
+      required: [userId, email, role, memberSince]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [tenant_admin, tenant_view, driver]
+        memberSince:
+          type: string
+          format: date-time
+
+    UpdateUserRoleRequest:
+      type: object
+      required: [role]
+      properties:
+        role:
+          type: string
+          enum: [tenant_admin, tenant_view]
+          description: driver role cannot be assigned via this endpoint
+
+    # ── Stations ───────────────────────────────────────────────────────────────
+    StationStatus:
+      type: string
+      enum: [active, planning, inactive, error]
+
+    StationVisibility:
+      type: string
+      enum: [public, private]
+
+    StationResponse:
+      type: object
+      required: [id, tenantId, name, externalId, locationId, status, visibility, createdAt, updatedAt, deletedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        externalId:
+          type: string
+          nullable: true
+        locationId:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          $ref: '#/components/schemas/StationStatus'
+        visibility:
+          $ref: '#/components/schemas/StationVisibility'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    CreateStationRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        external_id:
+          type: string
+          maxLength: 255
+        location_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/StationStatus'
+        visibility:
+          $ref: '#/components/schemas/StationVisibility'
+
+    UpdateStationRequest:
+      type: object
+      description: At least one field required. Nullable fields accept null to clear.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        external_id:
+          type: string
+          maxLength: 255
+          nullable: true
+        location_id:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          $ref: '#/components/schemas/StationStatus'
+        visibility:
+          $ref: '#/components/schemas/StationVisibility'
+
+    # ── Locations ──────────────────────────────────────────────────────────────
+    LocationVisibility:
+      type: string
+      enum: [public, private]
+
+    LocationResponse:
+      type: object
+      required: [id, tenantId, name, address, city, country, latitude, longitude, visibility, createdAt, updatedAt, deletedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        address:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        country:
+          type: string
+          nullable: true
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+          nullable: true
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+          nullable: true
+        visibility:
+          $ref: '#/components/schemas/LocationVisibility'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    CreateLocationRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        address:
+          type: string
+          maxLength: 500
+        city:
+          type: string
+          maxLength: 255
+        country:
+          type: string
+          maxLength: 100
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+        visibility:
+          $ref: '#/components/schemas/LocationVisibility'
+
+    UpdateLocationRequest:
+      type: object
+      description: At least one field required. Nullable fields accept null to clear.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        address:
+          type: string
+          maxLength: 500
+          nullable: true
+        city:
+          type: string
+          maxLength: 255
+          nullable: true
+        country:
+          type: string
+          maxLength: 100
+          nullable: true
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+          nullable: true
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+          nullable: true
+        visibility:
+          $ref: '#/components/schemas/LocationVisibility'
+
+    # ── Plugs ──────────────────────────────────────────────────────────────────
+    ConnectorType:
+      type: string
+      enum: [ccs, chademo, type2, type1, schuko, other]
+
+    PlugStatus:
+      type: string
+      enum: [available, occupied, out_of_service, reserved]
+
+    PlugResponse:
+      type: object
+      required: [id, stationId, connectorType, maxPowerKw, status, createdAt, updatedAt, deletedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        stationId:
+          type: string
+          format: uuid
+        connectorType:
+          $ref: '#/components/schemas/ConnectorType'
+        maxPowerKw:
+          type: number
+          exclusiveMinimum: 0
+        status:
+          $ref: '#/components/schemas/PlugStatus'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    CreatePlugRequest:
+      type: object
+      required: [connector_type, max_power_kw]
+      properties:
+        connector_type:
+          $ref: '#/components/schemas/ConnectorType'
+        max_power_kw:
+          type: number
+          exclusiveMinimum: 0
+        status:
+          $ref: '#/components/schemas/PlugStatus'
+
+    UpdatePlugRequest:
+      type: object
+      description: At least one field required
+      properties:
+        connector_type:
+          $ref: '#/components/schemas/ConnectorType'
+        max_power_kw:
+          type: number
+          exclusiveMinimum: 0
+        status:
+          $ref: '#/components/schemas/PlugStatus'
+
+    # ── Tariffs ────────────────────────────────────────────────────────────────
+    TariffResponse:
+      type: object
+      required: [id, tenantId, name, pricePerKwh, pricePerMinute, pricePerSession, currency, createdAt, updatedAt, deletedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        pricePerKwh:
+          type: number
+          minimum: 0
+          nullable: true
+        pricePerMinute:
+          type: number
+          minimum: 0
+          nullable: true
+        pricePerSession:
+          type: number
+          minimum: 0
+          nullable: true
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          description: ISO 4217 currency code (e.g. EUR, USD)
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    CreateTariffRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        price_per_kwh:
+          type: number
+          minimum: 0
+        price_per_minute:
+          type: number
+          minimum: 0
+        price_per_session:
+          type: number
+          minimum: 0
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+
+    UpdateTariffRequest:
+      type: object
+      description: At least one field required. Nullable fields accept null to clear.
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        price_per_kwh:
+          type: number
+          minimum: 0
+          nullable: true
+        price_per_minute:
+          type: number
+          minimum: 0
+          nullable: true
+        price_per_session:
+          type: number
+          minimum: 0
+          nullable: true
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+
+    # ── Customer groups ────────────────────────────────────────────────────────
+    CustomerGroupResponse:
+      type: object
+      required: [id, tenantId, name, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateCustomerGroupRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+
+    UpdateCustomerGroupRequest:
+      type: object
+      description: At least one field required
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+
+    AddMemberRequest:
+      type: object
+      required: [user_id]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+
+    AssignTariffToGroupRequest:
+      type: object
+      required: [tariff_id]
+      properties:
+        tariff_id:
+          type: string
+          format: uuid
+
+    AssignTariffZoneToGroupRequest:
+      type: object
+      required: [tariff_zone_id]
+      properties:
+        tariff_zone_id:
+          type: string
+          format: uuid
+
+    # ── Tariff zones ───────────────────────────────────────────────────────────
+    TariffZoneResponse:
+      type: object
+      required: [id, tenantId, name, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateTariffZoneRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+
+    UpdateTariffZoneRequest:
+      type: object
+      description: At least one field required
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+
+    AddLocationToZoneRequest:
+      type: object
+      required: [location_id]
+      properties:
+        location_id:
+          type: string
+          format: uuid
+
+    AddTariffToZoneRequest:
+      type: object
+      required: [tariff_id]
+      properties:
+        tariff_id:
+          type: string
+          format: uuid
+
+    # ── Sessions ───────────────────────────────────────────────────────────────
+    SessionStatus:
+      type: string
+      enum: [active, completed, error]
+
+    SessionResponse:
+      type: object
+      required: [id, userId, plugId, tenantId, tariffId, startedAt, endedAt, energyKwh, cost, currency, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        plugId:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        tariffId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Resolved at session start; null if no tariff matched
+        startedAt:
+          type: string
+          format: date-time
+        endedAt:
+          type: string
+          format: date-time
+          nullable: true
+        energyKwh:
+          type: number
+          nullable: true
+        cost:
+          type: number
+          nullable: true
+        currency:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/SessionStatus'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    StartSessionRequest:
+      type: object
+      required: [plug_id]
+      properties:
+        plug_id:
+          type: string
+          format: uuid
+
+  responses:
+    400:
+      description: Validation failed
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    401:
+      description: Missing or invalid authentication
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    403:
+      description: Insufficient permissions or wrong tenant
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    404:
+      description: Resource not found
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    409:
+      description: Conflict (e.g. duplicate email)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+
+# ── Paths ─────────────────────────────────────────────────────────────────────
+paths:
+
+  # ── Health ──────────────────────────────────────────────────────────────────
+  /health:
+    get:
+      tags: [health]
+      summary: Health check
+      operationId: getHealth
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  # ── Auth ─────────────────────────────────────────────────────────────────────
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: Register a new user
+      description: |
+        Create a new account and join an existing tenant.
+        The user is assigned `tenant_view` by default.
+        Returns an access token and sets a `REFRESH_TOKEN` httpOnly cookie.
+
+        **Rate limit:** 10 requests / 10 minutes per IP.
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Registered successfully
+          headers:
+            Set-Cookie:
+              description: REFRESH_TOKEN httpOnly cookie
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessTokenResponse'
+        '400':
+          $ref: '#/components/responses/400'
+        '404':
+          description: tenantId does not match any existing tenant
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          $ref: '#/components/responses/409'
+
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Log in
+      description: |
+        Authenticate with email and password.
+        Error response is intentionally generic to prevent email enumeration.
+
+        **Rate limit:** 10 requests / 5 minutes per IP.
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          headers:
+            Set-Cookie:
+              description: REFRESH_TOKEN httpOnly cookie
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessTokenResponse'
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      summary: Refresh access token
+      description: |
+        Rotate the refresh token and issue a new access token.
+        Token is read from the `REFRESH_TOKEN` cookie first, then from the request body.
+
+        **Replay detection:** if an already-rotated token is reused, the entire token
+        family is revoked and re-authentication is required.
+
+        **Rate limit:** 20 requests / 1 minute per IP.
+      operationId: refreshToken
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: Token refreshed
+          headers:
+            Set-Cookie:
+              description: New rotated REFRESH_TOKEN cookie
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessTokenResponse'
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Log out
+      description: |
+        Revoke the refresh token family and clear the cookie.
+        All tokens from the same login session become invalid.
+      operationId: logout
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+      responses:
+        '204':
+          description: Logged out successfully
+          headers:
+            Set-Cookie:
+              description: REFRESH_TOKEN cookie cleared
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+
+  /me:
+    get:
+      tags: [auth]
+      summary: Get current user
+      description: Returns the authenticated user's profile and role.
+      operationId: getMe
+      security:
+        - bearerAuth: []
+        - bearerAuth: []
+          tenantId: []
+      responses:
+        '200':
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUserResponse'
+        '401':
+          $ref: '#/components/responses/401'
+    patch:
+      tags: [auth]
+      summary: Update profile
+      description: Update the authenticated user's profile. At least one field required.
+      operationId: updateMe
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProfileRequest'
+      responses:
+        '200':
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [userId, email]
+                properties:
+                  userId:
+                    type: string
+                    format: uuid
+                  email:
+                    type: string
+                    format: email
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '409':
+          $ref: '#/components/responses/409'
+
+  /me/password:
+    patch:
+      tags: [auth]
+      summary: Change password
+      description: Change password after verifying the current one.
+      operationId: changePassword
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '204':
+          description: Password changed
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          description: Invalid token or wrong current password
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ── Tenants (public) ─────────────────────────────────────────────────────────
+  /tenants:
+    get:
+      tags: [tenants]
+      summary: List tenants
+      description: Public. Returns tenant IDs and names for use in registration forms.
+      operationId: listTenants
+      parameters:
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: Paginated tenant list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, total]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TenantListItem'
+                  total:
+                    type: integer
+
+  # ── Admin ─────────────────────────────────────────────────────────────────────
+  /admin/tenants:
+    get:
+      tags: [admin]
+      summary: List all tenants (admin)
+      description: Super admin only. Returns all tenants with creation timestamps.
+      operationId: adminListTenants
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Array of all tenants
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TenantAdminItem'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+    post:
+      tags: [admin]
+      summary: Create a tenant
+      description: Super admin only.
+      operationId: createTenant
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTenantRequest'
+      responses:
+        '201':
+          description: Tenant created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantAdminItem'
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+
+  # ── Tenant users ──────────────────────────────────────────────────────────────
+  /tenant/users:
+    get:
+      tags: [tenant-users]
+      summary: List tenant members
+      description: Requires `tenant_admin` role.
+      operationId: listTenantUsers
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: Paginated member list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, total]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TenantUserResponse'
+                  total:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+
+  /tenant/users/{userId}/role:
+    patch:
+      tags: [tenant-users]
+      summary: Update user role
+      description: |
+        Update a user's role within the tenant. Allowed: `tenant_admin`, `tenant_view`.
+        The `driver` role cannot be assigned here. A `tenant_admin` cannot change their own role.
+      operationId: updateUserRole
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/userId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRoleRequest'
+      responses:
+        '200':
+          description: Role updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantUserResponse'
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+
+  # ── Stations ──────────────────────────────────────────────────────────────────
+  /stations:
+    get:
+      tags: [stations]
+      summary: List public stations
+      description: No auth required. Returns only `visibility=public` stations.
+      operationId: listPublicStations
+      parameters:
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: Paginated public stations
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, total]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StationResponse'
+                  total:
+                    type: integer
+    post:
+      tags: [stations]
+      summary: Create a station
+      description: Requires `tenant_admin` role.
+      operationId: createStation
+      security:
+        - bearerAuth: []
+          tenantId: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStationRequest'
+      responses:
+        '201':
+          description: Station created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StationResponse'
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+
+  /stations/{id}:
+    get:
+      tags: [stations]
+      summary: Get a public station
+      description: |
+        No auth required. Returns 404 for private or non-existent stations
+        (both are indistinguishable to prevent ID enumeration).
+      operationId: getPublicStation
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          description: Station details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StationResponse'
+        '404':
+          $ref: '#/components/responses/404'
+    patch:
+      tags: [stations]
+      summary: Update a station
+      description: |
+        Requires `tenant_admin` role. At least one field required.
+        A station from another tenant returns 404 (not 403) to prevent enumeration.
+      operationId: updateStation
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStationRequest'
+      responses:
+        '200':
+          description: Station updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StationResponse'
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+
+  /tenant/stations:
+    get:
+      tags: [stations]
+      summary: List tenant stations
+      description: Requires any tenant role. Returns all visibility levels.
+      operationId: listTenantStations
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: Paginated tenant stations
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, total]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/StationResponse'
+                  total:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+
+  /tenant/stations/{id}:
+    get:
+      tags: [stations]
+      summary: Get a tenant station
+      description: Requires any tenant role. Returns any visibility.
+      operationId: getTenantStation
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          description: Station details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StationResponse'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+
+  # ── Locations ─────────────────────────────────────────────────────────────────
+  /locations:
+    get:
+      tags: [locations]
+      summary: List public locations
+      description: No auth required. Returns only `visibility=public` locations.
+      operationId: listPublicLocations
+      parameters:
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: Paginated public locations
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, total]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LocationResponse'
+                  total:
+                    type: integer
+    post:
+      tags: [locations]
+      summary: Create a location
+      description: Requires `tenant_admin` role.
+      operationId: createLocation
+      security:
+        - bearerAuth: []
+          tenantId: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLocationRequest'
+      responses:
+        '201':
+          description: Location created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocationResponse'
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+
+  /locations/{id}:
+    get:
+      tags: [locations]
+      summary: Get a public location
+      description: No auth required. Returns 404 for private or non-existent locations.
+      operationId: getPublicLocation
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          description: Location details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocationResponse'
+        '404':
+          $ref: '#/components/responses/404'
+    patch:
+      tags: [locations]
+      summary: Update a location
+      description: Requires `tenant_admin` role. Pass `null` to clear nullable fields.
+      operationId: updateLocation
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateLocationRequest'
+      responses:
+        '200':
+          description: Location updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocationResponse'
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+    delete:
+      tags: [locations]
+      summary: Delete a location
+      description: Soft-delete (sets `deleted_at`). Requires `tenant_admin` role.
+      operationId: deleteLocation
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '204':
+          description: Location deleted
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+
+  /tenant/locations:
+    get:
+      tags: [locations]
+      summary: List tenant locations
+      description: Requires any tenant role. Returns all visibility levels.
+      operationId: listTenantLocations
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: Paginated tenant locations
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, total]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LocationResponse'
+                  total:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+
+  /tenant/locations/{id}:
+    get:
+      tags: [locations]
+      summary: Get a tenant location
+      description: Requires any tenant role.
+      operationId: getTenantLocation
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          description: Location details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocationResponse'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+
+  # ── Plugs ─────────────────────────────────────────────────────────────────────
+  /stations/{stationId}/plugs:
+    get:
+      tags: [plugs]
+      summary: List plugs (public station)
+      description: No auth required. Station must be public.
+      operationId: listPublicStationPlugs
+      parameters:
+        - $ref: '#/components/parameters/stationId'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: Paginated plug list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, total]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PlugResponse'
+                  total:
+                    type: integer
+        '404':
+          description: Station not found or not public
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    post:
+      tags: [plugs]
+      summary: Add a plug
+      description: Requires `tenant_admin` role.
+      operationId: createPlug
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/stationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePlugRequest'
+      responses:
+        '201':
+          description: Plug created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlugResponse'
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          description: Station not found in this tenant
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /stations/{stationId}/plugs/{plugId}:
+    patch:
+      tags: [plugs]
+      summary: Update a plug
+      description: Requires `tenant_admin` role. At least one field required.
+      operationId: updatePlug
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/stationId'
+        - $ref: '#/components/parameters/plugId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePlugRequest'
+      responses:
+        '200':
+          description: Plug updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlugResponse'
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+    delete:
+      tags: [plugs]
+      summary: Delete a plug
+      description: Soft-delete. Requires `tenant_admin` role.
+      operationId: deletePlug
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/stationId'
+        - $ref: '#/components/parameters/plugId'
+      responses:
+        '204':
+          description: Plug deleted
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+
+  /tenant/stations/{stationId}/plugs:
+    get:
+      tags: [plugs]
+      summary: List plugs (tenant station)
+      description: Requires any tenant role. Station can be any visibility.
+      operationId: listTenantStationPlugs
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/stationId'
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: Paginated plug list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, total]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PlugResponse'
+                  total:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          description: Station not found in this tenant
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ── Tariffs ───────────────────────────────────────────────────────────────────
+  /tariffs:
+    get:
+      tags: [tariffs]
+      summary: List tariffs
+      description: Requires any tenant role. No public endpoint.
+      operationId: listTariffs
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: Paginated tariff list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, total]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TariffResponse'
+                  total:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+    post:
+      tags: [tariffs]
+      summary: Create a tariff
+      description: Requires `tenant_admin` role. No delete endpoint — tariffs are immutable once in use.
+      operationId: createTariff
+      security:
+        - bearerAuth: []
+          tenantId: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTariffRequest'
+      responses:
+        '201':
+          description: Tariff created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TariffResponse'
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+
+  /tariffs/{id}:
+    get:
+      tags: [tariffs]
+      summary: Get a tariff
+      description: Requires any tenant role.
+      operationId: getTariff
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          description: Tariff details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TariffResponse'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+    patch:
+      tags: [tariffs]
+      summary: Update a tariff
+      description: Requires `tenant_admin` role. Pass `null` to clear pricing fields.
+      operationId: updateTariff
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTariffRequest'
+      responses:
+        '200':
+          description: Tariff updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TariffResponse'
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+
+  # ── Customer groups ───────────────────────────────────────────────────────────
+  /customer-groups:
+    get:
+      tags: [customer-groups]
+      summary: List customer groups
+      description: Requires `tenant_admin` role.
+      operationId: listCustomerGroups
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: Paginated customer group list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, total]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CustomerGroupResponse'
+                  total:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+    post:
+      tags: [customer-groups]
+      summary: Create a customer group
+      description: Requires `tenant_admin` role.
+      operationId: createCustomerGroup
+      security:
+        - bearerAuth: []
+          tenantId: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCustomerGroupRequest'
+      responses:
+        '201':
+          description: Customer group created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerGroupResponse'
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+
+  /customer-groups/{id}:
+    get:
+      tags: [customer-groups]
+      summary: Get a customer group
+      operationId: getCustomerGroup
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          description: Customer group details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerGroupResponse'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+    patch:
+      tags: [customer-groups]
+      summary: Update a customer group
+      operationId: updateCustomerGroup
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCustomerGroupRequest'
+      responses:
+        '200':
+          description: Customer group updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerGroupResponse'
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+
+  /customer-groups/{id}/members:
+    post:
+      tags: [customer-groups]
+      summary: Add a member
+      description: Add a user to the group. Requires `tenant_admin` role.
+      operationId: addCustomerGroupMember
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddMemberRequest'
+      responses:
+        '204':
+          description: Member added
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+
+  /customer-groups/{id}/members/{userId}:
+    delete:
+      tags: [customer-groups]
+      summary: Remove a member
+      operationId: removeCustomerGroupMember
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+        - $ref: '#/components/parameters/userId'
+      responses:
+        '204':
+          description: Member removed
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          description: Group not found or user is not a member
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /customer-groups/{id}/tariffs:
+    post:
+      tags: [customer-groups]
+      summary: Assign a tariff
+      description: Tariff must belong to the same tenant. Requires `tenant_admin` role.
+      operationId: assignTariffToCustomerGroup
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignTariffToGroupRequest'
+      responses:
+        '204':
+          description: Tariff assigned
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          description: Group or tariff not found in this tenant
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /customer-groups/{id}/tariffs/{tariffId}:
+    delete:
+      tags: [customer-groups]
+      summary: Remove a tariff assignment
+      operationId: removeTariffFromCustomerGroup
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+        - $ref: '#/components/parameters/tariffId'
+      responses:
+        '204':
+          description: Tariff removed
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          description: Group not found or tariff not assigned
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /customer-groups/{id}/tariff-zones:
+    post:
+      tags: [customer-groups]
+      summary: Assign a tariff zone
+      operationId: assignTariffZoneToCustomerGroup
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignTariffZoneToGroupRequest'
+      responses:
+        '204':
+          description: Tariff zone assigned
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+
+  /customer-groups/{id}/tariff-zones/{zoneId}:
+    delete:
+      tags: [customer-groups]
+      summary: Remove a tariff zone assignment
+      operationId: removeTariffZoneFromCustomerGroup
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+        - $ref: '#/components/parameters/zoneId'
+      responses:
+        '204':
+          description: Tariff zone removed
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          description: Group not found or zone not assigned
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ── Tariff zones ──────────────────────────────────────────────────────────────
+  /tariff-zones:
+    get:
+      tags: [tariff-zones]
+      summary: List tariff zones
+      description: Requires `tenant_admin` role.
+      operationId: listTariffZones
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: Paginated tariff zone list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, total]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TariffZoneResponse'
+                  total:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+    post:
+      tags: [tariff-zones]
+      summary: Create a tariff zone
+      description: Requires `tenant_admin` role.
+      operationId: createTariffZone
+      security:
+        - bearerAuth: []
+          tenantId: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTariffZoneRequest'
+      responses:
+        '201':
+          description: Tariff zone created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TariffZoneResponse'
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+
+  /tariff-zones/{id}:
+    get:
+      tags: [tariff-zones]
+      summary: Get a tariff zone
+      operationId: getTariffZone
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          description: Tariff zone details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TariffZoneResponse'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+    patch:
+      tags: [tariff-zones]
+      summary: Update a tariff zone
+      operationId: updateTariffZone
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTariffZoneRequest'
+      responses:
+        '200':
+          description: Tariff zone updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TariffZoneResponse'
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+
+  /tariff-zones/{id}/locations:
+    post:
+      tags: [tariff-zones]
+      summary: Link a location
+      description: Location must belong to the same tenant. Requires `tenant_admin` role.
+      operationId: addLocationToTariffZone
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddLocationToZoneRequest'
+      responses:
+        '204':
+          description: Location linked
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          description: Zone or location not found in this tenant
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /tariff-zones/{id}/locations/{locationId}:
+    delete:
+      tags: [tariff-zones]
+      summary: Unlink a location
+      operationId: removeLocationFromTariffZone
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+        - $ref: '#/components/parameters/locationId'
+      responses:
+        '204':
+          description: Location unlinked
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          description: Zone not found or location not in this zone
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /tariff-zones/{id}/tariffs:
+    post:
+      tags: [tariff-zones]
+      summary: Link a tariff
+      description: Tariff must belong to the same tenant. Requires `tenant_admin` role.
+      operationId: addTariffToTariffZone
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddTariffToZoneRequest'
+      responses:
+        '204':
+          description: Tariff linked
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          description: Zone or tariff not found in this tenant
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /tariff-zones/{id}/tariffs/{tariffId}:
+    delete:
+      tags: [tariff-zones]
+      summary: Unlink a tariff
+      operationId: removeTariffFromTariffZone
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+        - $ref: '#/components/parameters/tariffId'
+      responses:
+        '204':
+          description: Tariff unlinked
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          description: Zone not found or tariff not in this zone
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  # ── Sessions ──────────────────────────────────────────────────────────────────
+  /sessions:
+    get:
+      tags: [sessions]
+      summary: List own sessions
+      description: Returns only the caller's sessions. Requires any tenant role.
+      operationId: listSessions
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: Paginated session list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, total]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SessionResponse'
+                  total:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+    post:
+      tags: [sessions]
+      summary: Start a session
+      description: |
+        Start a charging session on a plug. Any tenant role.
+        A tariff is resolved at start time; `tariffId` is null if none matched.
+      operationId: startSession
+      security:
+        - bearerAuth: []
+          tenantId: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartSessionRequest'
+      responses:
+        '201':
+          description: Session started (status=active)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          description: Plug not found in this tenant
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /sessions/{id}:
+    get:
+      tags: [sessions]
+      summary: Get a session
+      description: |
+        Regular users can only retrieve their own sessions.
+        `tenant_admin` can retrieve any session in the tenant.
+      operationId: getSession
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          description: Session details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          description: Session not found or belongs to another user
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /sessions/{id}/end:
+    patch:
+      tags: [sessions]
+      summary: End a session
+      description: |
+        End an active session. Only the session owner can call this.
+        Sets `endedAt`, calculates `energyKwh` and `cost`, transitions to `completed`.
+      operationId: endSession
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/id'
+      responses:
+        '200':
+          description: Session ended (status=completed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionResponse'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          description: Session belongs to another user
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          $ref: '#/components/responses/404'
+
+  /tenant/sessions:
+    get:
+      tags: [sessions]
+      summary: List all tenant sessions
+      description: Requires `tenant_admin` role.
+      operationId: listTenantSessions
+      security:
+        - bearerAuth: []
+          tenantId: []
+      parameters:
+        - $ref: '#/components/parameters/limit'
+        - $ref: '#/components/parameters/offset'
+      responses:
+        '200':
+          description: Paginated session list
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, total]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SessionResponse'
+                  total:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
