@@ -6,16 +6,19 @@ import {
   CreateLocationBodySchema,
   UpdateLocationBodySchema,
   LocationResponseSchema,
+  LocationListItemResponseSchema,
 } from "../http/schemas/locations.schemas.js";
 import { PaginationQuerySchema, paginatedResponse } from "../http/schemas/pagination.schemas.js";
-import { LocationsService, type LocationWithStations, type StationWithPlugs } from "../services/locations.service.js";
+import {
+  LocationsService,
+  type LocationWithStations,
+  type LocationWithSummary,
+  type StationWithPlugs,
+} from "../services/locations.service.js";
 import type { Selectable } from "kysely";
 import type { LocationsTable } from "../db/types.js";
 
-function toLocationResponse(
-  location: Selectable<LocationsTable>,
-  stations?: StationWithPlugs[],
-) {
+function toLocationResponse(location: Selectable<LocationsTable>, stations?: StationWithPlugs[]) {
   return LocationResponseSchema.parse({
     id: location.id,
     tenantId: location.tenant_id,
@@ -55,6 +58,31 @@ function toLocationWithStationsResponse({ location, stations }: LocationWithStat
   return toLocationResponse(location, stations);
 }
 
+function toLocationListItemResponse({
+  location: loc,
+  stationCount,
+  activeStationCount,
+  plugSummary,
+}: LocationWithSummary) {
+  return LocationListItemResponseSchema.parse({
+    id: loc.id,
+    tenantId: loc.tenant_id,
+    name: loc.name,
+    address: loc.address,
+    city: loc.city,
+    country: loc.country,
+    latitude: loc.latitude,
+    longitude: loc.longitude,
+    visibility: loc.visibility,
+    createdAt: loc.created_at.toISOString(),
+    updatedAt: loc.updated_at.toISOString(),
+    deletedAt: loc.deleted_at?.toISOString() ?? null,
+    stationCount,
+    activeStationCount,
+    plugSummary,
+  });
+}
+
 const ALL_TENANT_ROLES = ["tenant_admin", "tenant_view", "driver"] as const;
 
 /**
@@ -89,7 +117,7 @@ export const locationRoutes: FastifyPluginAsync = async (app) => {
   app.get("/locations", async (req, reply) => {
     const pagination = PaginationQuerySchema.parse(req.query);
     const result = await getService().getPublicLocations(pagination);
-    return reply.send(paginatedResponse(result.rows.map((loc) => toLocationResponse(loc)), result.total));
+    return reply.send(paginatedResponse(result.rows.map(toLocationListItemResponse), result.total));
   });
 
   app.get("/locations/:id", async (req, reply) => {
@@ -112,7 +140,9 @@ export const locationRoutes: FastifyPluginAsync = async (app) => {
         req.jwtUser!.sub,
         pagination,
       );
-      return reply.send(paginatedResponse(result.rows.map((loc) => toLocationResponse(loc)), result.total));
+      return reply.send(
+        paginatedResponse(result.rows.map(toLocationListItemResponse), result.total),
+      );
     },
   );
 

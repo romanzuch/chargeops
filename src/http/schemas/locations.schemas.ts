@@ -74,6 +74,36 @@ export const LocationResponseSchema = z.object({
   stations: z.array(StationWithPlugsSchema).optional(),
 });
 
+const connectorTypeSchema = z.enum(["ccs", "chademo", "type2", "type1", "schuko", "other"]);
+
+export const PlugMapSummarySchema = z.object({
+  total: z.number().int(),
+  available: z.number().int(),
+  maxPowerKw: z.number().nullable(),
+  hasHighPowerCharging: z.boolean(),
+  connectorTypes: z.array(connectorTypeSchema),
+});
+
+export const LocationListItemResponseSchema = z.object({
+  id: z.string(),
+  tenantId: z.string(),
+  name: z.string(),
+  address: z.string().nullable(),
+  city: z.string().nullable(),
+  country: z.string().nullable(),
+  latitude: z.number().nullable(),
+  longitude: z.number().nullable(),
+  visibility: locationVisibilitySchema,
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  deletedAt: z.string().nullable(),
+  stationCount: z.number().int(),
+  activeStationCount: z.number().int(),
+  plugSummary: PlugMapSummarySchema,
+});
+
 export type LocationResponse = z.infer<typeof LocationResponseSchema>;
+export type LocationListItemResponse = z.infer<typeof LocationListItemResponseSchema>;
 export type PlugSummary = z.infer<typeof PlugSummarySchema>;
+export type PlugMapSummary = z.infer<typeof PlugMapSummarySchema>;
 export type StationWithPlugs = z.infer<typeof StationWithPlugsSchema>;

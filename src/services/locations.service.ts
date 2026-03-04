@@ -4,10 +4,10 @@ import { NotFoundError } from "../http/errors.js";
 import {
   createLocation,
   findLocationById,
-  findPublicLocations,
   findPublicLocationById,
-  findLocationsByTenant,
-  findAccessibleLocations,
+  findPublicLocationsWithSummary,
+  findTenantLocationsWithSummary,
+  findAccessibleLocationsWithSummary,
   findPublicStationsWithPlugsForLocation,
   findAllStationsWithPlugsForLocation,
   updateLocation,
@@ -15,18 +15,17 @@ import {
   type CreateLocationInput,
   type UpdateLocationInput,
   type PaginationInput,
-  type PaginatedLocations,
+  type PaginatedLocationsWithSummary,
+  type LocationWithSummary,
   type StationWithPlugs,
 } from "../repositories/locations.repo.js";
 
-export type { StationWithPlugs };
+export type { StationWithPlugs, LocationWithSummary, PaginatedLocationsWithSummary };
 
 export interface LocationWithStations {
   location: Selectable<LocationsTable>;
   stations: StationWithPlugs[];
 }
-
-export type { PaginatedLocations };
 
 export class LocationsService {
   constructor(private db: Kysely<Database>) {}
@@ -57,8 +56,8 @@ export class LocationsService {
     }
   }
 
-  async getPublicLocations(pagination: PaginationInput): Promise<PaginatedLocations> {
-    return findPublicLocations(this.db, pagination);
+  async getPublicLocations(pagination: PaginationInput): Promise<PaginatedLocationsWithSummary> {
+    return findPublicLocationsWithSummary(this.db, pagination);
   }
 
   async getPublicLocation(locationId: string): Promise<LocationWithStations> {
@@ -73,22 +72,19 @@ export class LocationsService {
   async getTenantLocations(
     tenantId: string,
     pagination: PaginationInput,
-  ): Promise<PaginatedLocations> {
-    return findLocationsByTenant(this.db, tenantId, pagination);
+  ): Promise<PaginatedLocationsWithSummary> {
+    return findTenantLocationsWithSummary(this.db, tenantId, pagination);
   }
 
   async getAccessibleLocations(
     tenantId: string,
     userId: string,
     pagination: PaginationInput,
-  ): Promise<PaginatedLocations> {
-    return findAccessibleLocations(this.db, tenantId, userId, pagination);
+  ): Promise<PaginatedLocationsWithSummary> {
+    return findAccessibleLocationsWithSummary(this.db, tenantId, userId, pagination);
   }
 
-  async getTenantLocation(
-    locationId: string,
-    tenantId: string,
-  ): Promise<LocationWithStations> {
+  async getTenantLocation(locationId: string, tenantId: string): Promise<LocationWithStations> {
     const location = await findLocationById(this.db, locationId, tenantId);
     if (!location) {
       throw new NotFoundError("Location not found");
