@@ -1,6 +1,11 @@
 import type { Kysely, Selectable } from "kysely";
 import { sql } from "kysely";
-import type { Database, LocationVisibility, LocationsTable, StationsTable } from "../db/types.js";
+import type { Database, LocationVisibility, LocationsTable, PlugsTable, StationsTable } from "../db/types.js";
+
+export interface StationWithPlugs {
+  station: Selectable<StationsTable>;
+  plugs: Selectable<PlugsTable>[];
+}
 
 export interface CreateLocationInput {
   tenantId: string;
@@ -162,29 +167,59 @@ export async function findAccessibleLocations(
   return { rows, total: Number(countRow.total) };
 }
 
-export async function findPublicStationsForLocation(
+async function fetchPlugsForStations(
+  db: Kysely<Database>,
+  stationIds: string[],
+): Promise<Map<string, Selectable<PlugsTable>[]>> {
+  const plugs = await db
+    .selectFrom("plugs")
+    .selectAll()
+    .where("station_id", "in", stationIds)
+    .where("deleted_at", "is", null)
+    .execute();
+
+  const byStation = new Map<string, Selectable<PlugsTable>[]>();
+  for (const plug of plugs) {
+    const list = byStation.get(plug.station_id) ?? [];
+    list.push(plug);
+    byStation.set(plug.station_id, list);
+  }
+  return byStation;
+}
+
+export async function findPublicStationsWithPlugsForLocation(
   db: Kysely<Database>,
   locationId: string,
-): Promise<Selectable<StationsTable>[]> {
-  return db
+): Promise<StationWithPlugs[]> {
+  const stations = await db
     .selectFrom("stations")
     .selectAll()
     .where("location_id", "=", locationId)
     .where("visibility", "=", "public")
     .where("deleted_at", "is", null)
     .execute();
+
+  if (stations.length === 0) return [];
+
+  const plugsByStation = await fetchPlugsForStations(db, stations.map((s) => s.id));
+  return stations.map((station) => ({ station, plugs: plugsByStation.get(station.id) ?? [] }));
 }
 
-export async function findAllStationsForLocation(
+export async function findAllStationsWithPlugsForLocation(
   db: Kysely<Database>,
   locationId: string,
-): Promise<Selectable<StationsTable>[]> {
-  return db
+): Promise<StationWithPlugs[]> {
+  const stations = await db
     .selectFrom("stations")
     .selectAll()
     .where("location_id", "=", locationId)
     .where("deleted_at", "is", null)
     .execute();
+
+  if (stations.length === 0) return [];
+
+  const plugsByStation = await fetchPlugsForStations(db, stations.map((s) => s.id));
+  return stations.map((station) => ({ station, plugs: plugsByStation.get(station.id) ?? [] }));
 }
 
 export async function updateLocation(

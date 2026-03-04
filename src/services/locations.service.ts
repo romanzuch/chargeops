@@ -1,5 +1,5 @@
 import type { Kysely, Selectable } from "kysely";
-import type { Database, LocationsTable, StationsTable } from "../db/types.js";
+import type { Database, LocationsTable } from "../db/types.js";
 import { NotFoundError } from "../http/errors.js";
 import {
   createLocation,
@@ -8,19 +8,22 @@ import {
   findPublicLocationById,
   findLocationsByTenant,
   findAccessibleLocations,
-  findPublicStationsForLocation,
-  findAllStationsForLocation,
+  findPublicStationsWithPlugsForLocation,
+  findAllStationsWithPlugsForLocation,
   updateLocation,
   softDeleteLocation,
   type CreateLocationInput,
   type UpdateLocationInput,
   type PaginationInput,
   type PaginatedLocations,
+  type StationWithPlugs,
 } from "../repositories/locations.repo.js";
+
+export type { StationWithPlugs };
 
 export interface LocationWithStations {
   location: Selectable<LocationsTable>;
-  stations: Selectable<StationsTable>[];
+  stations: StationWithPlugs[];
 }
 
 export type { PaginatedLocations };
@@ -63,7 +66,7 @@ export class LocationsService {
     if (!location) {
       throw new NotFoundError("Location not found");
     }
-    const stations = await findPublicStationsForLocation(this.db, locationId);
+    const stations = await findPublicStationsWithPlugsForLocation(this.db, locationId);
     return { location, stations };
   }
 
@@ -90,7 +93,7 @@ export class LocationsService {
     if (!location) {
       throw new NotFoundError("Location not found");
     }
-    const stations = await findAllStationsForLocation(this.db, locationId);
+    const stations = await findAllStationsWithPlugsForLocation(this.db, locationId);
     return { location, stations };
   }
 }

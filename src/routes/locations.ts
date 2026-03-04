@@ -8,13 +8,13 @@ import {
   LocationResponseSchema,
 } from "../http/schemas/locations.schemas.js";
 import { PaginationQuerySchema, paginatedResponse } from "../http/schemas/pagination.schemas.js";
-import { LocationsService, type LocationWithStations } from "../services/locations.service.js";
+import { LocationsService, type LocationWithStations, type StationWithPlugs } from "../services/locations.service.js";
 import type { Selectable } from "kysely";
-import type { LocationsTable, StationsTable } from "../db/types.js";
+import type { LocationsTable } from "../db/types.js";
 
 function toLocationResponse(
   location: Selectable<LocationsTable>,
-  stations?: Selectable<StationsTable>[],
+  stations?: StationWithPlugs[],
 ) {
   return LocationResponseSchema.parse({
     id: location.id,
@@ -29,12 +29,24 @@ function toLocationResponse(
     createdAt: location.created_at.toISOString(),
     updatedAt: location.updated_at.toISOString(),
     deletedAt: location.deleted_at?.toISOString() ?? null,
-    stations: stations?.map((s) => ({
+    stations: stations?.map(({ station: s, plugs }) => ({
       id: s.id,
       name: s.name,
       externalId: s.external_id,
       status: s.status,
       visibility: s.visibility,
+      createdAt: s.created_at.toISOString(),
+      updatedAt: s.updated_at.toISOString(),
+      deletedAt: s.deleted_at?.toISOString() ?? null,
+      plugs: plugs.map((p) => ({
+        id: p.id,
+        connectorType: p.connector_type,
+        maxPowerKw: p.max_power_kw,
+        status: p.status,
+        createdAt: p.created_at.toISOString(),
+        updatedAt: p.updated_at.toISOString(),
+        deletedAt: p.deleted_at?.toISOString() ?? null,
+      })),
     })),
   });
 }
