@@ -13,18 +13,28 @@ function requireEnv(name: string): string {
 }
 
 let db: Kysely<Database>;
+const createdUserIds: string[] = [];
+
+async function createTrackedUser(args: { email: string; passwordHash: string }) {
+  const user = await createUser(db, args);
+  createdUserIds.push(user.id);
+  return user;
+}
 
 beforeAll(() => {
   db = createDb(requireEnv("DATABASE_URL"));
 });
 
 afterAll(async () => {
+  if (createdUserIds.length > 0) {
+    await db.deleteFrom("users").where("id", "in", createdUserIds).execute();
+  }
   await destroyDb();
 });
 
 describe("createUser", () => {
   it("happy path: returns a full row", async () => {
-    const row = await createUser(db, {
+    const row = await createTrackedUser({
       email: `create-happy-${Date.now()}@example.com`,
       passwordHash: "hash_value",
     });
@@ -37,7 +47,7 @@ describe("createUser", () => {
 
   it("duplicate email → ConflictError", async () => {
     const email = `dup-${Date.now()}@example.com`;
-    await createUser(db, { email, passwordHash: "hash1" });
+    await createTrackedUser({ email, passwordHash: "hash1" });
 
     await expect(createUser(db, { email, passwordHash: "hash2" })).rejects.toBeInstanceOf(
       ConflictError,
@@ -46,7 +56,7 @@ describe("createUser", () => {
 
   it("stores email as-is (no normalisation inside repo)", async () => {
     const email = `CaseSensitive-${Date.now()}@Example.COM`;
-    const row = await createUser(db, { email, passwordHash: "h" });
+    const row = await createTrackedUser({ email, passwordHash: "h" });
     expect(row.email).toBe(email);
   });
 });
@@ -54,7 +64,7 @@ describe("createUser", () => {
 describe("findUserByEmail", () => {
   it("returns the user when found", async () => {
     const email = `find-email-${Date.now()}@example.com`;
-    const created = await createUser(db, { email, passwordHash: "h" });
+    const created = await createTrackedUser({ email, passwordHash: "h" });
 
     const found = await findUserByEmail(db, email);
     expect(found).toBeDefined();
@@ -69,7 +79,7 @@ describe("findUserByEmail", () => {
 
 describe("findUserById", () => {
   it("returns the user when found", async () => {
-    const created = await createUser(db, {
+    const created = await createTrackedUser({
       email: `find-id-${Date.now()}@example.com`,
       passwordHash: "h",
     });

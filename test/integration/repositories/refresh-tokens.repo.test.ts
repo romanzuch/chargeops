@@ -22,6 +22,8 @@ function requireEnv(name: string): string {
 }
 
 let db: Kysely<Database>;
+const createdUserIds: string[] = [];
+const createdTenantIds: string[] = [];
 
 /** Seed a tenant and user, returning their IDs. */
 async function seedUserAndTenant(label: string): Promise<{ userId: string; tenantId: string }> {
@@ -30,11 +32,13 @@ async function seedUserAndTenant(label: string): Promise<{ userId: string; tenan
     .values({ name: `Tenant-${label}-${Date.now()}` })
     .returning("id")
     .executeTakeFirstOrThrow();
+  createdTenantIds.push(tenant.id);
 
   const user = await createUser(db, {
     email: `${label}-${Date.now()}@example.com`,
     passwordHash: "h",
   });
+  createdUserIds.push(user.id);
 
   return { userId: user.id, tenantId: tenant.id };
 }
@@ -48,6 +52,13 @@ beforeAll(() => {
 });
 
 afterAll(async () => {
+  // Deleting users cascades to refresh_tokens; deleting tenants cascades to refresh_tokens too.
+  if (createdUserIds.length > 0) {
+    await db.deleteFrom("users").where("id", "in", createdUserIds).execute();
+  }
+  if (createdTenantIds.length > 0) {
+    await db.deleteFrom("tenants").where("id", "in", createdTenantIds).execute();
+  }
   await destroyDb();
 });
 
@@ -230,6 +241,7 @@ describe("revokeAllForUser", () => {
       .values({ name: `Tenant2-revoke-all-${Date.now()}` })
       .returning("id")
       .executeTakeFirstOrThrow();
+    createdTenantIds.push(tenant2.id);
 
     const t1 = await createRefreshToken(db, {
       userId,

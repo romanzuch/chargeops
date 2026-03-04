@@ -581,20 +581,26 @@ describe("Auth Endpoints", () => {
    * Helper: Clean up test data from auth tables and the test tenant.
    */
   async function _cleanupTestData(): Promise<void> {
+    const testEmails = [
+      "newuser@example.com",
+      "cookietest@example.com",
+      "duplicate@example.com",
+      "normemail@example.com",
+      "login@example.com",
+      "logincookie@example.com",
+      "wrongpass@example.com",
+      "metest@example.com",
+      "refresh@example.com",
+      "rotatetest@example.com",
+      "replay@example.com",
+      "logout@example.com",
+      "familyrevoke@example.com",
+    ];
     try {
-      await db
-        .deleteFrom("refresh_tokens")
-        .where(
-          "user_id",
-          "in",
-          db.selectFrom("users").select("id").where("email", "like", "%@example.com"),
-        )
-        .execute();
-
-      await db.deleteFrom("users").where("email", "like", "%@example.com").execute();
+      // Deleting users cascades to refresh_tokens and user_tenant_roles.
+      await db.deleteFrom("users").where("email", "in", testEmails).execute();
       await db.deleteFrom("tenants").where("name", "=", "Test Tenant").execute();
     } catch (err) {
-      // Ignore errors (tables might not exist in test setup)
       console.error("Cleanup error (ignored):", err);
     }
   }

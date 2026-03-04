@@ -21,6 +21,7 @@ function requireEnv(name: string): string {
 }
 
 let db: Kysely<Database>;
+const createdTenantIds: string[] = [];
 
 async function seedTenant(label: string): Promise<string> {
   const row = await db
@@ -28,6 +29,7 @@ async function seedTenant(label: string): Promise<string> {
     .values({ name: `Tenant-${label}-${Date.now()}` })
     .returning("id")
     .executeTakeFirstOrThrow();
+  createdTenantIds.push(row.id);
   return row.id;
 }
 
@@ -44,6 +46,10 @@ beforeAll(() => {
 });
 
 afterAll(async () => {
+  // Deleting tenants cascades to all their stations (including soft-deleted ones).
+  if (createdTenantIds.length > 0) {
+    await db.deleteFrom("tenants").where("id", "in", createdTenantIds).execute();
+  }
   await destroyDb();
 });
 
