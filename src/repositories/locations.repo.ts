@@ -1,6 +1,12 @@
 import type { Kysely, Selectable } from "kysely";
 import { sql } from "kysely";
-import type { Database, LocationVisibility, LocationsTable, PlugsTable, StationsTable } from "../db/types.js";
+import type {
+  Database,
+  LocationVisibility,
+  LocationsTable,
+  PlugsTable,
+  StationsTable,
+} from "../db/types.js";
 
 export interface StationWithPlugs {
   station: Selectable<StationsTable>;
@@ -37,6 +43,89 @@ export interface PaginatedLocations {
   rows: Selectable<LocationsTable>[];
   total: number;
 }
+
+type ConnectorType = "ccs" | "chademo" | "type2" | "type1" | "schuko" | "other";
+
+const HIGH_POWER_KW = 150;
+
+export interface LocationWithSummary {
+  location: Selectable<LocationsTable>;
+  stationCount: number;
+  activeStationCount: number;
+  plugSummary: {
+    total: number;
+    available: number;
+    maxPowerKw: number | null;
+    hasHighPowerCharging: boolean;
+    connectorTypes: ConnectorType[];
+  };
+}
+
+export interface PaginatedLocationsWithSummary {
+  rows: LocationWithSummary[];
+  total: number;
+}
+
+function rowToLocationWithSummary(row: {
+  id: string;
+  tenant_id: string;
+  name: string;
+  address: string | null;
+  city: string | null;
+  country: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  visibility: LocationVisibility;
+  created_at: Date;
+  updated_at: Date;
+  deleted_at: Date | null;
+  station_count: string;
+  active_station_count: string;
+  total_plugs: string;
+  available_plugs: string;
+  max_power_kw: string | null;
+  connector_types: string[] | null;
+}): LocationWithSummary {
+  const maxPowerKw = row.max_power_kw !== null ? Number(row.max_power_kw) : null;
+  return {
+    location: {
+      id: row.id,
+      tenant_id: row.tenant_id,
+      name: row.name,
+      address: row.address,
+      city: row.city,
+      country: row.country,
+      latitude: row.latitude,
+      longitude: row.longitude,
+      visibility: row.visibility,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      deleted_at: row.deleted_at,
+    } as Selectable<LocationsTable>,
+    stationCount: Number(row.station_count),
+    activeStationCount: Number(row.active_station_count),
+    plugSummary: {
+      total: Number(row.total_plugs),
+      available: Number(row.available_plugs),
+      maxPowerKw,
+      hasHighPowerCharging: maxPowerKw !== null && maxPowerKw >= HIGH_POWER_KW,
+      connectorTypes: (row.connector_types ?? []) as ConnectorType[],
+    },
+  };
+}
+
+const summarySelectCols = [
+  sql<string>`count(distinct s.id)`.as("station_count"),
+  sql<string>`count(distinct s.id) filter (where s.status = 'active')`.as("active_station_count"),
+  sql<string>`count(p.id)`.as("total_plugs"),
+  sql<string>`count(p.id) filter (where p.status = 'available')`.as("available_plugs"),
+  sql<string | null>`max(p.max_power_kw)`.as("max_power_kw"),
+  sql<
+    string[] | null
+  >`array_agg(distinct p.connector_type::text) filter (where p.id is not null)`.as(
+    "connector_types",
+  ),
+] as const;
 
 export async function createLocation(
   db: Kysely<Database>,
@@ -167,6 +256,194 @@ export async function findAccessibleLocations(
   return { rows, total: Number(countRow.total) };
 }
 
+export async function findTenantLocationsWithSummary(
+  db: Kysely<Database>,
+  tenantId: string,
+  pagination: PaginationInput,
+): Promise<PaginatedLocationsWithSummary> {
+  const [countRow, dataRows] = await Promise.all([
+    db
+      .selectFrom("locations")
+      .where("tenant_id", "=", tenantId)
+      .where("deleted_at", "is", null)
+      .select((eb) => eb.fn.countAll<string>().as("total"))
+      .executeTakeFirstOrThrow(),
+    db
+      .selectFrom("locations as l")
+      .leftJoin("stations as s", (join) =>
+        join.onRef("s.location_id", "=", "l.id").on("s.deleted_at", "is", null),
+      )
+      .leftJoin("plugs as p", (join) =>
+        join.onRef("p.station_id", "=", "s.id").on("p.deleted_at", "is", null),
+      )
+      .where("l.tenant_id", "=", tenantId)
+      .where("l.deleted_at", "is", null)
+      .groupBy("l.id")
+      .select([
+        "l.id",
+        "l.tenant_id",
+        "l.name",
+        "l.address",
+        "l.city",
+        "l.country",
+        "l.latitude",
+        "l.longitude",
+        "l.visibility",
+        "l.created_at",
+        "l.updated_at",
+        "l.deleted_at",
+        ...summarySelectCols,
+      ])
+      .orderBy("l.created_at", "desc")
+      .limit(pagination.limit)
+      .offset(pagination.offset)
+      .execute(),
+  ]);
+
+  return { rows: dataRows.map(rowToLocationWithSummary), total: Number(countRow.total) };
+}
+
+export async function findPublicLocationsWithSummary(
+  db: Kysely<Database>,
+  pagination: PaginationInput,
+): Promise<PaginatedLocationsWithSummary> {
+  const [countRow, dataRows] = await Promise.all([
+    db
+      .selectFrom("locations")
+      .where("visibility", "=", "public")
+      .where("deleted_at", "is", null)
+      .select((eb) => eb.fn.countAll<string>().as("total"))
+      .executeTakeFirstOrThrow(),
+    db
+      .selectFrom("locations as l")
+      .leftJoin("stations as s", (join) =>
+        join
+          .onRef("s.location_id", "=", "l.id")
+          .on("s.deleted_at", "is", null)
+          .on("s.visibility", "=", "public"),
+      )
+      .leftJoin("plugs as p", (join) =>
+        join.onRef("p.station_id", "=", "s.id").on("p.deleted_at", "is", null),
+      )
+      .where("l.visibility", "=", "public")
+      .where("l.deleted_at", "is", null)
+      .groupBy("l.id")
+      .select([
+        "l.id",
+        "l.tenant_id",
+        "l.name",
+        "l.address",
+        "l.city",
+        "l.country",
+        "l.latitude",
+        "l.longitude",
+        "l.visibility",
+        "l.created_at",
+        "l.updated_at",
+        "l.deleted_at",
+        ...summarySelectCols,
+      ])
+      .orderBy("l.created_at", "desc")
+      .limit(pagination.limit)
+      .offset(pagination.offset)
+      .execute(),
+  ]);
+
+  return { rows: dataRows.map(rowToLocationWithSummary), total: Number(countRow.total) };
+}
+
+export async function findAccessibleLocationsWithSummary(
+  db: Kysely<Database>,
+  tenantId: string,
+  userId: string,
+  pagination: PaginationInput,
+): Promise<PaginatedLocationsWithSummary> {
+  const [countRow, dataRows] = await Promise.all([
+    db
+      .selectFrom("locations as l")
+      .where("l.tenant_id", "=", tenantId)
+      .where("l.deleted_at", "is", null)
+      .where((eb) =>
+        eb.or([
+          eb("l.visibility", "=", "public"),
+          eb.exists(
+            eb
+              .selectFrom("tariff_zone_locations as tzl")
+              .innerJoin(
+                "customer_group_tariff_zones as cgtz",
+                "cgtz.tariff_zone_id",
+                "tzl.tariff_zone_id",
+              )
+              .innerJoin(
+                "user_customer_groups as ucg",
+                "ucg.customer_group_id",
+                "cgtz.customer_group_id",
+              )
+              .select(sql<number>`1`.as("one"))
+              .whereRef("tzl.location_id", "=", "l.id")
+              .where("ucg.user_id", "=", userId),
+          ),
+        ]),
+      )
+      .select((eb) => eb.fn.countAll<string>().as("total"))
+      .executeTakeFirstOrThrow(),
+    db
+      .selectFrom("locations as l")
+      .leftJoin("stations as s", (join) =>
+        join.onRef("s.location_id", "=", "l.id").on("s.deleted_at", "is", null),
+      )
+      .leftJoin("plugs as p", (join) =>
+        join.onRef("p.station_id", "=", "s.id").on("p.deleted_at", "is", null),
+      )
+      .where("l.tenant_id", "=", tenantId)
+      .where("l.deleted_at", "is", null)
+      .where((eb) =>
+        eb.or([
+          eb("l.visibility", "=", "public"),
+          eb.exists(
+            eb
+              .selectFrom("tariff_zone_locations as tzl")
+              .innerJoin(
+                "customer_group_tariff_zones as cgtz",
+                "cgtz.tariff_zone_id",
+                "tzl.tariff_zone_id",
+              )
+              .innerJoin(
+                "user_customer_groups as ucg",
+                "ucg.customer_group_id",
+                "cgtz.customer_group_id",
+              )
+              .select(sql<number>`1`.as("one"))
+              .whereRef("tzl.location_id", "=", "l.id")
+              .where("ucg.user_id", "=", userId),
+          ),
+        ]),
+      )
+      .groupBy("l.id")
+      .select([
+        "l.id",
+        "l.tenant_id",
+        "l.name",
+        "l.address",
+        "l.city",
+        "l.country",
+        "l.latitude",
+        "l.longitude",
+        "l.visibility",
+        "l.created_at",
+        "l.updated_at",
+        "l.deleted_at",
+        ...summarySelectCols,
+      ])
+      .orderBy("l.created_at", "desc")
+      .limit(pagination.limit)
+      .offset(pagination.offset)
+      .execute(),
+  ]);
+
+  return { rows: dataRows.map(rowToLocationWithSummary), total: Number(countRow.total) };
+}
+
 async function fetchPlugsForStations(
   db: Kysely<Database>,
   stationIds: string[],
@@ -201,7 +478,10 @@ export async function findPublicStationsWithPlugsForLocation(
 
   if (stations.length === 0) return [];
 
-  const plugsByStation = await fetchPlugsForStations(db, stations.map((s) => s.id));
+  const plugsByStation = await fetchPlugsForStations(
+    db,
+    stations.map((s) => s.id),
+  );
   return stations.map((station) => ({ station, plugs: plugsByStation.get(station.id) ?? [] }));
 }
 
@@ -218,7 +498,10 @@ export async function findAllStationsWithPlugsForLocation(
 
   if (stations.length === 0) return [];
 
-  const plugsByStation = await fetchPlugsForStations(db, stations.map((s) => s.id));
+  const plugsByStation = await fetchPlugsForStations(
+    db,
+    stations.map((s) => s.id),
+  );
   return stations.map((station) => ({ station, plugs: plugsByStation.get(station.id) ?? [] }));
 }
 
