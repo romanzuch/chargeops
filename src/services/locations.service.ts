@@ -1,5 +1,5 @@
 import type { Kysely, Selectable } from "kysely";
-import type { Database, LocationsTable } from "../db/types.js";
+import type { Database, LocationsTable, StationsTable } from "../db/types.js";
 import { NotFoundError } from "../http/errors.js";
 import {
   createLocation,
@@ -8,6 +8,8 @@ import {
   findPublicLocationById,
   findLocationsByTenant,
   findAccessibleLocations,
+  findPublicStationsForLocation,
+  findAllStationsForLocation,
   updateLocation,
   softDeleteLocation,
   type CreateLocationInput,
@@ -15,6 +17,11 @@ import {
   type PaginationInput,
   type PaginatedLocations,
 } from "../repositories/locations.repo.js";
+
+export interface LocationWithStations {
+  location: Selectable<LocationsTable>;
+  stations: Selectable<StationsTable>[];
+}
 
 export type { PaginatedLocations };
 
@@ -51,12 +58,13 @@ export class LocationsService {
     return findPublicLocations(this.db, pagination);
   }
 
-  async getPublicLocation(locationId: string): Promise<Selectable<LocationsTable>> {
+  async getPublicLocation(locationId: string): Promise<LocationWithStations> {
     const location = await findPublicLocationById(this.db, locationId);
     if (!location) {
       throw new NotFoundError("Location not found");
     }
-    return location;
+    const stations = await findPublicStationsForLocation(this.db, locationId);
+    return { location, stations };
   }
 
   async getTenantLocations(
@@ -77,11 +85,12 @@ export class LocationsService {
   async getTenantLocation(
     locationId: string,
     tenantId: string,
-  ): Promise<Selectable<LocationsTable>> {
+  ): Promise<LocationWithStations> {
     const location = await findLocationById(this.db, locationId, tenantId);
     if (!location) {
       throw new NotFoundError("Location not found");
     }
-    return location;
+    const stations = await findAllStationsForLocation(this.db, locationId);
+    return { location, stations };
   }
 }

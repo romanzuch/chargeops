@@ -426,6 +426,23 @@ components:
       type: string
       enum: [public, private]
 
+    StationSummary:
+      type: object
+      required: [id, name, externalId, status, visibility]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        externalId:
+          type: string
+          nullable: true
+        status:
+          $ref: '#/components/schemas/StationStatus'
+        visibility:
+          $ref: '#/components/schemas/StationVisibility'
+
     LocationResponse:
       type: object
       required: [id, tenantId, name, address, city, country, latitude, longitude, visibility, createdAt, updatedAt, deletedAt]
@@ -469,6 +486,14 @@ components:
           type: string
           format: date-time
           nullable: true
+        stations:
+          type: array
+          description: |
+            Embedded stations at this location.
+            Only present on single-location endpoints (GET /locations/:id, GET /tenant/locations/:id).
+            Public endpoint returns only public stations; tenant endpoint returns all non-deleted stations.
+          items:
+            $ref: '#/components/schemas/StationSummary'
 
     CreateLocationRequest:
       type: object
