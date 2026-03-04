@@ -2,12 +2,26 @@ import { z } from "zod";
 
 const locationVisibilitySchema = z.enum(["public", "private"]);
 
-export const StationSummarySchema = z.object({
+export const PlugSummarySchema = z.object({
+  id: z.string(),
+  connectorType: z.enum(["ccs", "chademo", "type2", "type1", "schuko", "other"]),
+  maxPowerKw: z.number(),
+  status: z.enum(["available", "occupied", "out_of_service", "reserved"]),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  deletedAt: z.string().nullable(),
+});
+
+export const StationWithPlugsSchema = z.object({
   id: z.string(),
   name: z.string(),
   externalId: z.string().nullable(),
   status: z.enum(["active", "planning", "inactive", "error"]),
   visibility: z.enum(["public", "private"]),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  deletedAt: z.string().nullable(),
+  plugs: z.array(PlugSummarySchema),
 });
 
 export const CreateLocationBodySchema = z.object({
@@ -57,8 +71,9 @@ export const LocationResponseSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   deletedAt: z.string().nullable(),
-  stations: z.array(StationSummarySchema).optional(),
+  stations: z.array(StationWithPlugsSchema).optional(),
 });
 
 export type LocationResponse = z.infer<typeof LocationResponseSchema>;
-export type StationSummary = z.infer<typeof StationSummarySchema>;
+export type PlugSummary = z.infer<typeof PlugSummarySchema>;
+export type StationWithPlugs = z.infer<typeof StationWithPlugsSchema>;

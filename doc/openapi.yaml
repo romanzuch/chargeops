@@ -426,9 +426,34 @@ components:
       type: string
       enum: [public, private]
 
-    StationSummary:
+    PlugSummary:
       type: object
-      required: [id, name, externalId, status, visibility]
+      required: [id, connectorType, maxPowerKw, status, createdAt, updatedAt, deletedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        connectorType:
+          $ref: '#/components/schemas/ConnectorType'
+        maxPowerKw:
+          type: number
+          exclusiveMinimum: 0
+        status:
+          $ref: '#/components/schemas/PlugStatus'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    StationWithPlugs:
+      type: object
+      required: [id, name, externalId, status, visibility, createdAt, updatedAt, deletedAt, plugs]
       properties:
         id:
           type: string
@@ -442,6 +467,20 @@ components:
           $ref: '#/components/schemas/StationStatus'
         visibility:
           $ref: '#/components/schemas/StationVisibility'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        deletedAt:
+          type: string
+          format: date-time
+          nullable: true
+        plugs:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlugSummary'
 
     LocationResponse:
       type: object
@@ -493,7 +532,7 @@ components:
             Only present on single-location endpoints (GET /locations/:id, GET /tenant/locations/:id).
             Public endpoint returns only public stations; tenant endpoint returns all non-deleted stations.
           items:
-            $ref: '#/components/schemas/StationSummary'
+            $ref: '#/components/schemas/StationWithPlugs'
 
     CreateLocationRequest:
       type: object
