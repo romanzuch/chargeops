@@ -1,6 +1,6 @@
 import type { Kysely, Selectable } from "kysely";
 import { sql } from "kysely";
-import type { Database, LocationVisibility, LocationsTable } from "../db/types.js";
+import type { Database, LocationVisibility, LocationsTable, StationsTable } from "../db/types.js";
 
 export interface CreateLocationInput {
   tenantId: string;
@@ -160,6 +160,31 @@ export async function findAccessibleLocations(
   ]);
 
   return { rows, total: Number(countRow.total) };
+}
+
+export async function findPublicStationsForLocation(
+  db: Kysely<Database>,
+  locationId: string,
+): Promise<Selectable<StationsTable>[]> {
+  return db
+    .selectFrom("stations")
+    .selectAll()
+    .where("location_id", "=", locationId)
+    .where("visibility", "=", "public")
+    .where("deleted_at", "is", null)
+    .execute();
+}
+
+export async function findAllStationsForLocation(
+  db: Kysely<Database>,
+  locationId: string,
+): Promise<Selectable<StationsTable>[]> {
+  return db
+    .selectFrom("stations")
+    .selectAll()
+    .where("location_id", "=", locationId)
+    .where("deleted_at", "is", null)
+    .execute();
 }
 
 export async function updateLocation(

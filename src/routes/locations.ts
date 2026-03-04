@@ -8,11 +8,14 @@ import {
   LocationResponseSchema,
 } from "../http/schemas/locations.schemas.js";
 import { PaginationQuerySchema, paginatedResponse } from "../http/schemas/pagination.schemas.js";
-import { LocationsService } from "../services/locations.service.js";
+import { LocationsService, type LocationWithStations } from "../services/locations.service.js";
 import type { Selectable } from "kysely";
-import type { LocationsTable } from "../db/types.js";
+import type { LocationsTable, StationsTable } from "../db/types.js";
 
-function toLocationResponse(location: Selectable<LocationsTable>) {
+function toLocationResponse(
+  location: Selectable<LocationsTable>,
+  stations?: Selectable<StationsTable>[],
+) {
   return LocationResponseSchema.parse({
     id: location.id,
     tenantId: location.tenant_id,
@@ -26,7 +29,18 @@ function toLocationResponse(location: Selectable<LocationsTable>) {
     createdAt: location.created_at.toISOString(),
     updatedAt: location.updated_at.toISOString(),
     deletedAt: location.deleted_at?.toISOString() ?? null,
+    stations: stations?.map((s) => ({
+      id: s.id,
+      name: s.name,
+      externalId: s.external_id,
+      status: s.status,
+      visibility: s.visibility,
+    })),
   });
+}
+
+function toLocationWithStationsResponse({ location, stations }: LocationWithStations) {
+  return toLocationResponse(location, stations);
 }
 
 const ALL_TENANT_ROLES = ["tenant_admin", "tenant_view", "driver"] as const;
@@ -63,13 +77,13 @@ export const locationRoutes: FastifyPluginAsync = async (app) => {
   app.get("/locations", async (req, reply) => {
     const pagination = PaginationQuerySchema.parse(req.query);
     const result = await getService().getPublicLocations(pagination);
-    return reply.send(paginatedResponse(result.rows.map(toLocationResponse), result.total));
+    return reply.send(paginatedResponse(result.rows.map((loc) => toLocationResponse(loc)), result.total));
   });
 
   app.get("/locations/:id", async (req, reply) => {
     const { id } = req.params as { id: string };
-    const location = await getService().getPublicLocation(id);
-    return reply.send(toLocationResponse(location));
+    const result = await getService().getPublicLocation(id);
+    return reply.send(toLocationWithStationsResponse(result));
   });
 
   // ---------------------------------------------------------------------------
@@ -86,7 +100,7 @@ export const locationRoutes: FastifyPluginAsync = async (app) => {
         req.jwtUser!.sub,
         pagination,
       );
-      return reply.send(paginatedResponse(result.rows.map(toLocationResponse), result.total));
+      return reply.send(paginatedResponse(result.rows.map((loc) => toLocationResponse(loc)), result.total));
     },
   );
 
@@ -95,8 +109,8 @@ export const locationRoutes: FastifyPluginAsync = async (app) => {
     { preHandler: [app.verifyJwt, app.verifyTenant, app.verifyRole([...ALL_TENANT_ROLES])] },
     async (req, reply) => {
       const { id } = req.params as { id: string };
-      const location = await getService().getTenantLocation(id, req.tenantId!);
-      return reply.send(toLocationResponse(location));
+      const result = await getService().getTenantLocation(id, req.tenantId!);
+      return reply.send(toLocationWithStationsResponse(result));
     },
   );
 

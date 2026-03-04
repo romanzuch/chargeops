@@ -2,6 +2,14 @@ import { z } from "zod";
 
 const locationVisibilitySchema = z.enum(["public", "private"]);
 
+export const StationSummarySchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  externalId: z.string().nullable(),
+  status: z.enum(["active", "planning", "inactive", "error"]),
+  visibility: z.enum(["public", "private"]),
+});
+
 export const CreateLocationBodySchema = z.object({
   name: z.string().min(1, "Name is required").max(255),
   address: z.string().max(500).optional(),
@@ -49,6 +57,8 @@ export const LocationResponseSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   deletedAt: z.string().nullable(),
+  stations: z.array(StationSummarySchema).optional(),
 });
 
 export type LocationResponse = z.infer<typeof LocationResponseSchema>;
+export type StationSummary = z.infer<typeof StationSummarySchema>;
